@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1772969680092-hribl1g",
+  "sessionId": "session-1772847531374-yweab8j",
+  "missionId": "turn:1772969680089-r5xqny1",
+  "turnId": "turn:1772969680089-r5xqny1",
+  "version": 1,
+  "mode": "standard",
+  "status": "completed",
+  "source": "orchestrator",
+  "promptDigest": "？为什么你没有调用claude code",
+  "summary": "？为什么你没有调用claude code",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1772969680092,
+  "updatedAt": 1772969857216,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1772969680094
+  }
+}

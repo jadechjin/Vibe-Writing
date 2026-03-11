@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${THESIS_POSTGRES_DB:-thesis_workflow}
+      POSTGRES_USER: ${THESIS_POSTGRES_USER:-thesis}
+      POSTGRES_PASSWORD: ${THESIS_POSTGRES_PASSWORD:-thesis}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${THESIS_MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${THESIS_MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  temporal:
+    image: temporalio/auto-setup:1.26.2
+    environment:
+      DB: postgresql12
+      DB_PORT: 5432
+      POSTGRES_USER: ${THESIS_POSTGRES_USER:-thesis}
+      POSTGRES_PWD: ${THESIS_POSTGRES_PASSWORD:-thesis}
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+    ports:
+      - "7233:7233"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  minio_data:
