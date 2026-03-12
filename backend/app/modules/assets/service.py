@@ -24,6 +24,8 @@ from app.modules.assets.schemas import (
     AssetMetadataDetail,
     AssetQCConfirmResponse,
     AssetUploadRequest,
+    BatchConfirmAssetQCRequest,
+    BatchConfirmAssetQCResponse,
     ManifestConfirmResponse,
     ManifestCreateAcceptedResponse,
     ManifestCreateRequest,
@@ -813,8 +815,39 @@ async def confirm_asset_qc(session: SessionLike, asset_id: str) -> AssetQCConfir
     )
 
 
+async def batch_confirm_asset_qc(
+    session: SessionLike,
+    system_id: str,
+    asset_ids: list[str],
+) -> BatchConfirmAssetQCResponse:
+    succeeded: list[str] = []
+    failed: list[dict[str, str]] = []
+
+    for asset_id in asset_ids:
+        statement = select(AssetMetadata).where(AssetMetadata.asset_id == asset_id)
+        result = await _maybe_await(session.execute(statement))
+        metadata = result.scalar_one_or_none()
+        if metadata is None:
+            failed.append({"assetId": asset_id, "error": "Asset metadata not found"})
+            continue
+        # Verify asset belongs to the given system
+        asset_stmt = select(Asset).where(Asset.id == asset_id)
+        asset_result = await _maybe_await(session.execute(asset_stmt))
+        asset = asset_result.scalar_one_or_none()
+        if asset is None or asset.system_id != system_id:
+            failed.append({"assetId": asset_id, "error": "Asset does not belong to this system"})
+            continue
+        metadata.qc_status = "confirmed"
+        await _maybe_await(session.flush())
+        succeeded.append(asset_id)
+
+    await _maybe_await(session.commit())
+    return BatchConfirmAssetQCResponse(succeeded=succeeded, failed=failed)
+
+
 __all__ = [
     "MANIFEST_TASK_START_DELAY_SECONDS",
+    "batch_confirm_asset_qc",
     "bind_asset",
     "complete_analysis_run",
     "complete_manifest_generation",

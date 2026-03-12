@@ -15,6 +15,8 @@ from app.common.events import TaskEvent
 from app.core.exceptions import AppException
 from app.modules.evidence import repository
 from app.modules.evidence.schemas import (
+    BatchApproveClaimsRequest,
+    BatchApproveClaimsResponse,
     ClaimApproveRequest,
     ClaimDetail,
     ClaimEvidenceLinkCreateRequest,
@@ -794,9 +796,47 @@ async def _record_generation_failure(
         )
 
 
+async def batch_approve_claims(
+    session: SessionLike,
+    system_id: str,
+    claim_ids: list[str],
+) -> BatchApproveClaimsResponse:
+    # Pre-fetch valid section keys for this system once
+    allowed_section_keys = set(
+        (
+            await _maybe_await(
+                session.scalars(
+                    select(SystemSection.section_key).where(SystemSection.system_id == system_id)
+                )
+            )
+        ).all()
+    )
+
+    succeeded: list[str] = []
+    failed: list[dict[str, str]] = []
+
+    for claim_id in claim_ids:
+        claim = await repository.get_claim(session, claim_id)
+        if claim is None:
+            failed.append({"claimId": claim_id, "error": "Claim not found"})
+            continue
+        if claim.system_id != system_id:
+            failed.append({"claimId": claim_id, "error": "Claim does not belong to this system"})
+            continue
+        if claim.section_ref not in allowed_section_keys:
+            failed.append({"claimId": claim_id, "error": "Claim section_ref is not defined for this system"})
+            continue
+        await repository.update_claim_status(session, claim, "approved")
+        succeeded.append(claim_id)
+
+    await _maybe_await(session.commit())
+    return BatchApproveClaimsResponse(succeeded=succeeded, failed=failed)
+
+
 __all__ = [
     "EVIDENCE_TASK_START_DELAY_SECONDS",
     "approve_claim",
+    "batch_approve_claims",
     "bind_claim_evidence",
     "complete_evidence_matrix_generation",
     "complete_figure_plan_generation",

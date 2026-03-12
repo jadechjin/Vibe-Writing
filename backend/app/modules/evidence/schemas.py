@@ -86,7 +86,18 @@ class EvidenceMatrixGenerateAcceptedResponse(CamelModel):
     handle: JobHandle
 
 
+class BatchApproveClaimsRequest(CamelModel):
+    claim_ids: list[str]
+
+
+class BatchApproveClaimsResponse(CamelModel):
+    succeeded: list[str]
+    failed: list[dict[str, str]]
+
+
 __all__ = [
+    "BatchApproveClaimsRequest",
+    "BatchApproveClaimsResponse",
     "ClaimApproveRequest",
     "ClaimDetail",
     "ClaimEvidenceLinkCreateRequest",

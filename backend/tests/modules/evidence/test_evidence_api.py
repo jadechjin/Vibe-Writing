@@ -785,3 +785,124 @@ def test_create_claim_evidence_link_missing_asset_returns_404(client: TestClient
     assert response.status_code == 404
     body = response.json()
     assert body["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Batch approve claims tests
+# ---------------------------------------------------------------------------
+
+
+def _create_claim_with_section(
+    session: Session,
+    system_id: str,
+    claim_id: str,
+    section_key: str,
+) -> Claim:
+    section = session.scalars(
+        select(SystemSection).where(
+            SystemSection.system_id == system_id,
+            SystemSection.section_key == section_key,
+        )
+    ).first()
+    if section is None:
+        section = SystemSection(
+            system_id=system_id,
+            section_key=section_key,
+            title=section_key.capitalize(),
+            order_no=1,
+        )
+        session.add(section)
+        session.flush()
+    claim = Claim(
+        system_id=system_id,
+        claim_id=claim_id,
+        statement=f"Claim {claim_id}",
+        section_ref=section_key,
+        status="draft",
+    )
+    session.add(claim)
+    session.flush()
+    return claim
+
+
+def test_batch_approve_claims_all_succeed(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        c1 = _create_claim_with_section(session, system.id, "C1", "results")
+        c2 = _create_claim_with_section(session, system.id, "C2", "results")
+        session.commit()
+        system_id = system.id
+        c1_id, c2_id = c1.id, c2.id
+
+    response = client.post(
+        f"/api/systems/{system_id}/claims/batch-approve",
+        json={"claimIds": [c1_id, c2_id]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert set(body["data"]["succeeded"]) == {c1_id, c2_id}
+    assert body["data"]["failed"] == []
+
+
+def test_batch_approve_claims_partial_failure(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        c1 = _create_claim_with_section(session, system.id, "C1", "results")
+        session.commit()
+        system_id = system.id
+        c1_id = c1.id
+
+    response = client.post(
+        f"/api/systems/{system_id}/claims/batch-approve",
+        json={"claimIds": [c1_id, "nonexistent-id"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["succeeded"] == [c1_id]
+    assert len(body["data"]["failed"]) == 1
+    assert body["data"]["failed"][0]["claimId"] == "nonexistent-id"
+
+
+def test_batch_approve_claims_empty_input(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        session.commit()
+        system_id = system.id
+
+    response = client.post(
+        f"/api/systems/{system_id}/claims/batch-approve",
+        json={"claimIds": []},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["succeeded"] == []
+    assert body["data"]["failed"] == []
+
+
+def test_batch_approve_claims_wrong_system(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system1 = _create_system(session, project_id=project.id, system_no=1)
+        system2 = _create_system(session, project_id=project.id, system_no=2)
+        c1 = _create_claim_with_section(session, system1.id, "C1", "results")
+        session.commit()
+        system2_id = system2.id
+        c1_id = c1.id
+
+    response = client.post(
+        f"/api/systems/{system2_id}/claims/batch-approve",
+        json={"claimIds": [c1_id]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["succeeded"] == []
+    assert len(body["data"]["failed"]) == 1

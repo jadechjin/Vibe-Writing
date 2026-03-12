@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.websocket import get_broadcaster
 from app.common.schemas import ApiResponse
 from app.modules.evidence.schemas import (
+    BatchApproveClaimsRequest,
+    BatchApproveClaimsResponse,
     ClaimApproveRequest,
     ClaimDetail,
     ClaimEvidenceLinkCreateRequest,
@@ -21,6 +23,7 @@ from app.modules.evidence.schemas import (
 from app.modules.evidence.service import (
     EVIDENCE_TASK_START_DELAY_SECONDS,
     approve_claim as approve_claim_service,
+    batch_approve_claims as batch_approve_claims_service,
     bind_claim_evidence as bind_claim_evidence_service,
     complete_evidence_matrix_generation,
     complete_figure_plan_generation,
@@ -157,4 +160,17 @@ async def bind_claim_evidence(
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[ClaimEvidenceLinkDetail]:
     result = await bind_claim_evidence_service(session, claim_id, payload)
+    return ApiResponse(data=result)
+
+
+@router.post(
+    "/systems/{system_id}/claims/batch-approve",
+    response_model=ApiResponse[BatchApproveClaimsResponse],
+)
+async def batch_approve_claims(
+    system_id: str,
+    payload: BatchApproveClaimsRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BatchApproveClaimsResponse]:
+    result = await batch_approve_claims_service(session, system_id, payload.claim_ids)
     return ApiResponse(data=result)

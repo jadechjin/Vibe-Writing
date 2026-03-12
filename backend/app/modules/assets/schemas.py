@@ -194,6 +194,15 @@ class AssetQCConfirmResponse(CamelModel):
     confirmed_at: datetime
 
 
+class BatchConfirmAssetQCRequest(CamelModel):
+    asset_ids: list[str]
+
+
+class BatchConfirmAssetQCResponse(CamelModel):
+    succeeded: list[str]
+    failed: list[dict[str, str]]
+
+
 __all__ = [
     "AnalysisRunCompleteRequest",
     "AnalysisRunCreateAcceptedResponse",
@@ -205,6 +214,8 @@ __all__ = [
     "AssetMetadataDetail",
     "AssetQCConfirmResponse",
     "AssetUploadRequest",
+    "BatchConfirmAssetQCRequest",
+    "BatchConfirmAssetQCResponse",
     "ManifestConfirmResponse",
     "ManifestCreateAcceptedResponse",
     "ManifestCreateRequest",

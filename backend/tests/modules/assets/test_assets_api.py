@@ -627,3 +627,100 @@ def test_bind_asset_reverts_downstream_state_to_analysis_ready(client: TestClien
 
     assert system is not None
     assert system.status == SystemState.ANALYSIS_READY.value
+
+
+# ---------------------------------------------------------------------------
+# Batch confirm asset QC tests
+# ---------------------------------------------------------------------------
+
+
+def _create_asset_with_metadata(
+    session: Session,
+    project_id: str,
+    system_id: str,
+    file_name: str = "fig.png",
+    qc_status: str = "pending",
+) -> tuple[Asset, AssetMetadata]:
+    asset = Asset(
+        project_id=project_id,
+        system_id=system_id,
+        asset_type="figure",
+        file_name=file_name,
+        storage_key=f"uploads/{file_name}",
+        uploaded_by="owner-1",
+    )
+    session.add(asset)
+    session.flush()
+    metadata = AssetMetadata(asset_id=asset.id, qc_status=qc_status)
+    session.add(metadata)
+    session.flush()
+    return asset, metadata
+
+
+def test_batch_confirm_asset_qc_all_succeed(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        a1, _ = _create_asset_with_metadata(session, project.id, system.id, "fig1.png")
+        a2, _ = _create_asset_with_metadata(session, project.id, system.id, "fig2.png")
+        session.commit()
+        system_id = system.id
+        a1_id, a2_id = a1.id, a2.id
+
+    response = client.post(
+        f"/api/systems/{system_id}/assets/batch-confirm-qc",
+        json={"assetIds": [a1_id, a2_id]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert set(body["data"]["succeeded"]) == {a1_id, a2_id}
+    assert body["data"]["failed"] == []
+
+
+def test_batch_confirm_asset_qc_missing_metadata(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        asset = Asset(
+            project_id=project.id,
+            system_id=system.id,
+            asset_type="figure",
+            file_name="no-meta.png",
+            storage_key="uploads/no-meta.png",
+            uploaded_by="owner-1",
+        )
+        session.add(asset)
+        session.commit()
+        system_id = system.id
+        asset_id = asset.id
+
+    response = client.post(
+        f"/api/systems/{system_id}/assets/batch-confirm-qc",
+        json={"assetIds": [asset_id]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["succeeded"] == []
+    assert len(body["data"]["failed"]) == 1
+    assert "metadata" in body["data"]["failed"][0]["error"].lower()
+
+
+def test_batch_confirm_asset_qc_empty_input(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        session.commit()
+        system_id = system.id
+
+    response = client.post(
+        f"/api/systems/{system_id}/assets/batch-confirm-qc",
+        json={"assetIds": []},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["succeeded"] == []
+    assert body["data"]["failed"] == []

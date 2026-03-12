@@ -16,6 +16,8 @@ from app.modules.assets.schemas import (
     AssetDetail,
     AssetQCConfirmResponse,
     AssetUploadRequest,
+    BatchConfirmAssetQCRequest,
+    BatchConfirmAssetQCResponse,
     ManifestConfirmResponse,
     ManifestCreateAcceptedResponse,
     ManifestCreateRequest,
@@ -23,6 +25,7 @@ from app.modules.assets.schemas import (
 )
 from app.modules.assets.service import (
     MANIFEST_TASK_START_DELAY_SECONDS,
+    batch_confirm_asset_qc as batch_confirm_asset_qc_service,
     bind_asset as bind_asset_service,
     complete_analysis_run as complete_analysis_run_service,
     confirm_asset_qc as confirm_asset_qc_service,
@@ -193,4 +196,17 @@ async def confirm_asset_qc(
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[AssetQCConfirmResponse]:
     result = await confirm_asset_qc_service(session, asset_id)
+    return ApiResponse(data=result)
+
+
+@router.post(
+    "/systems/{system_id}/assets/batch-confirm-qc",
+    response_model=ApiResponse[BatchConfirmAssetQCResponse],
+)
+async def batch_confirm_asset_qc(
+    system_id: str,
+    payload: BatchConfirmAssetQCRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BatchConfirmAssetQCResponse]:
+    result = await batch_confirm_asset_qc_service(session, system_id, payload.asset_ids)
     return ApiResponse(data=result)
