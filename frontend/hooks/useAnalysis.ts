@@ -67,6 +67,12 @@ export type AssetUploadInput = {
   uploadedBy: string
 }
 
+export type FileUploadInput = {
+  file: File
+  assetType: string
+  uploadedBy: string
+}
+
 export type AssetBindInput = {
   semanticDescription?: string
   sourceDescription?: string
@@ -128,6 +134,38 @@ export function useUploadAsset(systemId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: analysisKeys.assets(systemId) })
       queryClient.invalidateQueries({ queryKey: ["manifest", systemId] })
+
+      const currentState = queryClient.getQueryData<WorkflowSnapshot | null>(["workflow", systemId])?.currentState
+      if (currentState && UPLOAD_RESET_STATES.has(currentState)) {
+        updateWorkflowSnapshotState(queryClient, systemId, "Data_Uploaded")
+      } else if (currentState && DOWNSTREAM_ASSET_CONFIRMATION_STATES.has(currentState)) {
+        updateWorkflowSnapshotState(queryClient, systemId, "Analysis_Ready")
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
+    },
+  })
+}
+
+export function useFileUploadAsset(systemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (input: FileUploadInput) => {
+      const formData = new FormData()
+      formData.append("file", input.file)
+      formData.append("system_id", systemId)
+      formData.append("asset_type", input.assetType)
+      formData.append("uploaded_by", input.uploadedBy)
+      return apiRequest<AssetDetail>(`/assets/upload-file`, {
+        method: "POST",
+        body: formData,
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: analysisKeys.assets(systemId) })
+      queryClient.invalidateQueries({ queryKey: ["manifest", systemId] })
+      queryClient.invalidateQueries({ queryKey: ["literature-assets", systemId] })
 
       const currentState = queryClient.getQueryData<WorkflowSnapshot | null>(["workflow", systemId])?.currentState
       if (currentState && UPLOAD_RESET_STATES.has(currentState)) {

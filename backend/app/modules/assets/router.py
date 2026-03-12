@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.websocket import get_broadcaster
 from app.common.schemas import ApiResponse
+from app.common.storage import upload_fileobj
 from app.modules.assets.schemas import (
     AnalysisRunCompleteRequest,
     AnalysisRunCreateAcceptedResponse,
@@ -44,6 +45,32 @@ from app.modules.assets.service import (
 from app.persistence import get_db_session
 
 router = APIRouter(tags=["assets"])
+
+
+@router.post(
+    "/assets/upload-file",
+    response_model=ApiResponse[AssetDetail],
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_file(
+    file: UploadFile = File(...),
+    system_id: str = Form(...),
+    asset_type: str = Form(...),
+    uploaded_by: str = Form(default="user"),
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[AssetDetail]:
+    content_type = file.content_type or "application/octet-stream"
+    storage_key = upload_fileobj(file.file, file.filename or "unknown", content_type)
+    payload = AssetUploadRequest(
+        system_id=system_id,
+        asset_type=asset_type,
+        file_name=file.filename or "unknown",
+        storage_key=storage_key,
+        mime_type=content_type,
+        uploaded_by=uploaded_by,
+    )
+    asset = await upload_asset_service(session, payload)
+    return ApiResponse(data=asset)
 
 
 @router.post(

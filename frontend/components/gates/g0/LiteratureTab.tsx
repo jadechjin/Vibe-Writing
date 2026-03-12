@@ -2,7 +2,7 @@
 
 import { useRef, useState, type CSSProperties } from "react"
 
-import { useDeleteLiteratureAsset, useLiteratureAssets, useUploadAsset } from "../../../hooks/useLiteratureAssets"
+import { useDeleteLiteratureAsset, useFileUploadAsset, useLiteratureAssets } from "../../../hooks/useLiteratureAssets"
 
 // ---- Props ----
 
@@ -103,7 +103,7 @@ const deleteBtnStyle: CSSProperties = {
 
 export function LiteratureTab({ systemId, isReadOnly }: LiteratureTabProps) {
   const { data: assets, isLoading } = useLiteratureAssets(systemId)
-  const uploadMutation = useUploadAsset(systemId)
+  const uploadMutation = useFileUploadAsset(systemId)
   const deleteMutation = useDeleteLiteratureAsset(systemId)
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -116,13 +116,10 @@ export function LiteratureTab({ systemId, isReadOnly }: LiteratureTabProps) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const storageKey = `ref_lit_${Date.now()}`
     uploadMutation.mutate(
       {
+        file,
         assetType: "reference_literature",
-        fileName: file.name,
-        storageKey,
-        mimeType: file.type || undefined,
         uploadedBy: "user",
       },
       {

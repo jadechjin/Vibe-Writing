@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { apiRequest } from "../lib/api"
 import type { AssetDetail } from "./useAnalysis"
-import { useUploadAsset } from "./useAnalysis"
+import { useFileUploadAsset, useUploadAsset } from "./useAnalysis"
 
 const literatureKeys = {
   list: (systemId: string) => ["literature-assets", systemId] as const,
@@ -33,4 +33,4 @@ export function useDeleteLiteratureAsset(systemId: string) {
   })
 }
 
-export { useUploadAsset }
+export { useFileUploadAsset, useUploadAsset }
