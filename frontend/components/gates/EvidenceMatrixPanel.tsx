@@ -470,22 +470,22 @@ export function EvidenceMatrixPanel({
         {outlinesLoading ? (
           <EmptyState text="加载提纲中..." />
         ) : outlinesError ? (
-          <div style={errorTextStyle}>Outline 加载失败：{outlinesError instanceof Error ? outlinesError.message : "Unknown error"}</div>
+          <div style={errorTextStyle}>Outline 加载失败：{outlinesError instanceof Error ? outlinesError.message : "未知错误"}</div>
         ) : latestOutline ? (
           <div style={listStyle}>
             <div style={itemStyle}>
               <div style={itemHeaderStyle}>
-                <div style={itemTitleStyle}>Outline v{latestOutline.version}</div>
+                <div style={itemTitleStyle}>提纲 v{latestOutline.version}</div>
                 <StatusBadge status={latestOutline.status} />
               </div>
               <div style={itemMetaStyle}>
-                Based on {latestOutline.generatedFromClaimsJson.length} claims. Updated:{" "}
+                基于 {latestOutline.generatedFromClaimsJson.length} 条 Claims。更新时间：{" "}
                 {new Date(latestOutline.updatedAt).toLocaleString()}
               </div>
               {latestOutline.approvedAt ? (
-                <div style={itemMetaStyle}>Confirmed: {new Date(latestOutline.approvedAt).toLocaleString()}</div>
+                <div style={itemMetaStyle}>确认时间：{new Date(latestOutline.approvedAt).toLocaleString()}</div>
               ) : null}
-              <div style={itemMetaStyle}>Current bindings: {latestOutline.bindings.length}</div>
+              <div style={itemMetaStyle}>当前绑定数：{latestOutline.bindings.length}</div>
               <div style={listStyle}>
                 {sections.map((section) => {
                   const binding = bindingBySectionKey.get(section.sectionKey)
@@ -493,42 +493,42 @@ export function EvidenceMatrixPanel({
                     <div key={section.id} style={itemStyle}>
                       <div style={itemHeaderStyle}>
                         <div style={itemTitleStyle}>{section.title}</div>
-                        <StatusBadge status={binding ? "Bound" : "Waiting"} variant={binding ? "success" : "pending"} />
+                        <StatusBadge status={binding ? "已绑定" : "等待中"} variant={binding ? "success" : "pending"} />
                       </div>
-                      <div style={itemMetaStyle}>Key: {section.sectionKey}</div>
+                      <div style={itemMetaStyle}>键值：{section.sectionKey}</div>
                       {binding ? (
                         <>
-                          <div style={itemMetaStyle}>Asset: {assetNameById.get(binding.assetId) ?? binding.assetId}</div>
-                          {binding.bindingNote ? <div style={itemMetaStyle}>Note: {binding.bindingNote}</div> : null}
+                          <div style={itemMetaStyle}>资产：{assetNameById.get(binding.assetId) ?? binding.assetId}</div>
+                          {binding.bindingNote ? <div style={itemMetaStyle}>备注：{binding.bindingNote}</div> : null}
                         </>
                       ) : (
-                        <EmptyState text="No binding for this section yet." />
+                        <EmptyState text="该章节尚无绑定。" />
                       )}
                     </div>
                   )
                 })}
-                {sections.length === 0 ? <EmptyState text="No system sections available." /> : null}
+                {sections.length === 0 ? <EmptyState text="暂无系统章节。" /> : null}
               </div>
               {assetOptions.length > 0 && sections.length > 0 ? (
                 <div style={{ ...gateTheme.fieldGroup, marginTop: "10px" }}>
-                  <label style={fieldLabelStyle} htmlFor="outline-binding-asset-id">Outline binding asset</label>
+                  <label style={fieldLabelStyle} htmlFor="outline-binding-asset-id">提纲绑定资产</label>
                   <select
                     id="outline-binding-asset-id"
                     style={inputStyle}
                     value={bindingDraft.assetId}
                     onChange={(event) => { setBindingDraft((prev) => ({ ...prev, assetId: event.target.value })); setBindingFeedback(null) }}
                   >
-                    <option value="">Select an asset</option>
+                    <option value="">选择资产</option>
                     {assetOptions.map((asset) => <option key={asset.id} value={asset.id}>{asset.label}</option>)}
                   </select>
-                  <label style={fieldLabelStyle} htmlFor="outline-binding-section-key">Target section</label>
+                  <label style={fieldLabelStyle} htmlFor="outline-binding-section-key">目标章节</label>
                   <select
                     id="outline-binding-section-key"
                     style={inputStyle}
                     value={bindingDraft.sectionKey}
                     onChange={(event) => { setBindingDraft((prev) => ({ ...prev, sectionKey: event.target.value })); setBindingFeedback(null) }}
                   >
-                    <option value="">Select a section</option>
+                    <option value="">选择章节</option>
                     {sections.map((section) => <option key={section.id} value={section.sectionKey}>{section.title}</option>)}
                   </select>
                 </div>
@@ -537,7 +537,7 @@ export function EvidenceMatrixPanel({
               )}
               <div style={actionRowStyle}>
                 <ActionButton
-                  label={createOutlineBinding.isPending ? "Binding..." : "Add Outline Binding"}
+                  label={createOutlineBinding.isPending ? "绑定中..." : "添加提纲绑定"}
                   onClick={handleCreateBinding}
                   disabled={createOutlineBinding.isPending || !normalizeText(bindingDraft.assetId) || !normalizeText(bindingDraft.sectionKey)}
                   isPending={createOutlineBinding.isPending}
@@ -545,7 +545,7 @@ export function EvidenceMatrixPanel({
                 />
                 {!isOutlineConfirmed ? (
                   <ActionButton
-                    label={confirmOutline.isPending ? "Confirming..." : "Confirm Outline"}
+                    label={confirmOutline.isPending ? "确认中..." : "确认提纲"}
                     onClick={() => confirmOutline.mutate(latestOutline.id)}
                     disabled={confirmOutline.isPending}
                     isPending={confirmOutline.isPending}
@@ -558,20 +558,20 @@ export function EvidenceMatrixPanel({
         ) : (
           <div style={listStyle}>
             <div style={itemStyle}>
-              <div style={itemTitleStyle}>No outline generated yet.</div>
+              <div style={itemTitleStyle}>尚未生成提纲。</div>
               <div style={helperTextStyle}>Outline 尚未生成，但当前 system sections 仍会保留可见，方便先检查后续绑定目标。</div>
             </div>
             {sections.map((section) => (
               <div key={section.id} style={itemStyle}>
                 <div style={itemHeaderStyle}>
                   <div style={itemTitleStyle}>{section.title}</div>
-                  <StatusBadge status="Waiting" variant="pending" />
+                  <StatusBadge status="等待中" variant="pending" />
                 </div>
-                <div style={itemMetaStyle}>Key: {section.sectionKey}</div>
-                <EmptyState text="Generate an outline to start binding assets for this section." />
+                <div style={itemMetaStyle}>键值：{section.sectionKey}</div>
+                <EmptyState text="生成提纲后即可为该章节绑定资产。" />
               </div>
             ))}
-            {sections.length === 0 ? <EmptyState text="No system sections available." /> : null}
+            {sections.length === 0 ? <EmptyState text="暂无系统章节。" /> : null}
           </div>
         )}
         {createBindingError ? <div style={errorTextStyle}>Outline 绑定失败：{createBindingError}</div> : null}
@@ -579,7 +579,7 @@ export function EvidenceMatrixPanel({
       </SectionCard>
 
       {blockers.length > 0 ? (
-        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>Blockers ({blockers.length})</span>}>
+        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>阻塞项 ({blockers.length})</span>}>
           <div style={blockerListStyle}>
             {blockers.map((blocker, index) => (
               <div key={`${blocker.code}-${index}`} style={blockerItemStyle}>

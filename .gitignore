@@ -29,3 +29,6 @@ venv/
 .DS_Store
 Thumbs.db
 .ace-tool/
+
+# bug record
+bug.md

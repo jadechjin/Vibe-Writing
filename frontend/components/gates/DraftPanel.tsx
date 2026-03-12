@@ -1022,47 +1022,47 @@ export function DraftPanel({
     <div style={panelStyle}>
       <GateTaskStatus systemId={systemId} gateKey="G5" />
       <div style={sectionCardStyle}>
-        <div style={titleStyle}>Chapter Drafting &amp; Review</div>
+        <div style={titleStyle}>章节起草与审阅</div>
         <div style={descStyle}>
           当前状态：{currentState ?? "Unknown"}。G5 现在按 latest draft 真相把 section 稳定分成 approved、needs review、ready to generate 三组，避免 transport 顺序把界面搞成一坨。
         </div>
         <div style={summaryGridStyle}>
           <div style={summaryCardStyle}>
             <div style={summaryValueStyle}>{sections.length}</div>
-            <div style={summaryLabelStyle}>Sections</div>
+            <div style={summaryLabelStyle}>章节</div>
           </div>
           <div style={summaryCardStyle}>
             <div style={summaryValueStyle}>{generatedDraftCount}</div>
-            <div style={summaryLabelStyle}>Drafts</div>
+            <div style={summaryLabelStyle}>草稿</div>
           </div>
           <div style={summaryCardStyle}>
             <div style={summaryValueStyle}>{approvedDraftCount}</div>
-            <div style={summaryLabelStyle}>Approved</div>
+            <div style={summaryLabelStyle}>已通过</div>
           </div>
           <div style={summaryCardStyle}>
             <div style={summaryValueStyle}>{needsReviewCount}</div>
-            <div style={summaryLabelStyle}>Needs Review</div>
+            <div style={summaryLabelStyle}>待审阅</div>
           </div>
           <div style={summaryCardStyle}>
             <div style={summaryValueStyle}>{readyToGenerateCount}</div>
-            <div style={summaryLabelStyle}>Ready</div>
+            <div style={summaryLabelStyle}>待生成</div>
           </div>
         </div>
       </div>
 
       {draftsLoading ? (
         <div style={sectionCardStyle}>
-          <div style={emptyStateStyle}>Loading drafts...</div>
+          <div style={emptyStateStyle}>加载草稿中...</div>
         </div>
       ) : draftsError ? (
         <div style={sectionCardStyle}>
           <div style={errorTextStyle}>
-            Drafts 加载失败：{draftsError instanceof Error ? draftsError.message : "Unknown error"}
+            Drafts 加载失败：{draftsError instanceof Error ? draftsError.message : "未知错误"}
           </div>
         </div>
       ) : sections.length === 0 ? (
         <div style={sectionCardStyle}>
-          <div style={emptyStateStyle}>No system sections available yet.</div>
+          <div style={emptyStateStyle}>暂无系统章节。</div>
         </div>
       ) : (
         (Object.keys(SECTION_GROUP_META) as SectionGroupKey[]).map((groupKey) => {
@@ -1094,7 +1094,7 @@ export function DraftPanel({
       {blockers.length > 0 ? (
         <div style={sectionCardStyle}>
           <div style={{ ...titleStyle, fontSize: "13px", color: "#fca5a5" }}>
-            Blockers ({blockers.length})
+            阻塞项 ({blockers.length})
           </div>
           <div style={blockerListStyle}>
             {blockers.map((blocker, index) => (
