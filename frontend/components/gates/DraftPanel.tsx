@@ -12,6 +12,10 @@ import type { SectionDraftDetail } from "../../hooks/useDrafts"
 import { useOutlines } from "../../hooks/useEvidence"
 import type { SystemDetail } from "../../hooks/useProjects"
 import type { Blocker, WorkflowSnapshot } from "../../hooks/useProjectStatus"
+import { gateTheme } from "../../styles/gate-theme"
+import { ActionButton } from "../ui/ActionButton"
+import { EmptyState } from "../ui/EmptyState"
+import { SectionCard } from "../ui/SectionCard"
 import {
   getLatestDraftsBySection,
   getLatestOutline,
@@ -71,31 +75,13 @@ const SECTION_GROUP_META: Record<
   },
 }
 
-const panelStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "14px",
-}
+const panelStyle = gateTheme.panel
 
-const sectionCardStyle: CSSProperties = {
-  padding: "16px",
-  borderRadius: "14px",
-  border: "1px solid rgba(148, 163, 184, 0.15)",
-  background: "rgba(30, 41, 59, 0.38)",
-}
+const sectionCardStyle = gateTheme.sectionCard
 
-const titleStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 700,
-  color: "#f8fafc",
-  marginBottom: "8px",
-}
+const titleStyle = gateTheme.title
 
-const descStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.6,
-  color: "#94a3b8",
-}
+const descStyle = gateTheme.desc
 
 const summaryGridStyle: CSSProperties = {
   display: "grid",
@@ -388,13 +374,7 @@ const helperTextStyle: CSSProperties = {
   color: "#94a3b8",
 }
 
-const emptyStateStyle: CSSProperties = {
-  padding: "12px",
-  textAlign: "center",
-  color: "#64748b",
-  fontSize: "12px",
-  fontStyle: "italic",
-}
+const emptyStateStyle = gateTheme.emptyState
 
 const errorTextStyle: CSSProperties = {
   marginTop: "8px",

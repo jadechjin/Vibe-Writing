@@ -28,14 +28,6 @@ const headerStyle: CSSProperties = {
   marginBottom: "4px",
 }
 
-const backLinkStyle: CSSProperties = {
-  fontSize: "13px",
-  color: "#60a5fa",
-  textDecoration: "none",
-  display: "inline-block",
-  marginBottom: "8px",
-}
-
 const titleStyle: CSSProperties = {
   fontSize: "20px",
   fontWeight: 700,
@@ -70,9 +62,6 @@ const emptyStyle: CSSProperties = {
   padding: "36px 24px",
   color: "#64748b",
   fontSize: "14px",
-  minHeight: "100vh",
-  background:
-    "radial-gradient(circle at top, rgba(30, 64, 175, 0.18), transparent 34%), linear-gradient(180deg, #020617 0%, #0f172a 56%, #111827 100%)",
 }
 
 const outcomeBlockedStyle: CSSProperties = {
@@ -286,10 +275,6 @@ function SystemWorkspacePage({
       workbenchPanel={workbenchPanel}
       statusTray={statusTray}
     >
-      <a href={`/projects/${projectId}`} style={backLinkStyle}>
-        &larr; Back to Project
-      </a>
-
       <div style={headerStyle}>
         <div>
           <div style={titleStyle}>System Workspace</div>

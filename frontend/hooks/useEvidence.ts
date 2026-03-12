@@ -204,3 +204,24 @@ export function useCreateOutlineBinding(systemId: string) {
     },
   })
 }
+
+export type BatchApproveClaimsResponse = {
+  succeeded: string[]
+  failed: Array<{ claimId: string; reason: string }>
+}
+
+export function useBatchApproveClaims(systemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (claimIds: string[]) =>
+      apiRequest<BatchApproveClaimsResponse>(`/systems/${systemId}/claims/batch-approve`, {
+        method: "POST",
+        body: JSON.stringify({ claim_ids: claimIds }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: evidenceKeys.claims(systemId) })
+      queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
+    },
+  })
+}

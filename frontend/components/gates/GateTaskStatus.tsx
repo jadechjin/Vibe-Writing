@@ -1,6 +1,6 @@
 "use client"
 
-import type { CSSProperties } from "react"
+import { useEffect, useState, type CSSProperties } from "react"
 
 import { useWebSocketContext } from "../../contexts/WebSocketContext"
 import { getGateKeyFromTaskEvent, type GateKey } from "../../lib/gateMapping"
@@ -72,7 +72,23 @@ const percentageStyle: CSSProperties = {
   textAlign: "right",
 }
 
-function ProgressBar({ value }: Readonly<{ value: number }>) {
+function ProgressBar({ value, indeterminate }: Readonly<{ value: number; indeterminate?: boolean }>) {
+  if (indeterminate) {
+    return (
+      <div style={progressBarOuter}>
+        <div
+          style={{
+            width: "40%",
+            height: "100%",
+            borderRadius: "3px",
+            background: "#60a5fa",
+            animation: "indeterminate-slide 1.4s ease-in-out infinite",
+          }}
+        />
+      </div>
+    )
+  }
+
   const innerStyle: CSSProperties = {
     width: `${Math.min(100, Math.max(0, value))}%`,
     height: "100%",
@@ -92,8 +108,13 @@ function isActiveTask(event: TaskEvent): boolean {
   return event.status === "running" || event.status === "waiting_user"
 }
 
+function isSucceededTask(event: TaskEvent): boolean {
+  return event.status === "succeeded"
+}
+
 export function GateTaskStatus({ systemId, gateKey }: GateTaskStatusProps) {
   const { events } = useWebSocketContext()
+  const [showSucceeded, setShowSucceeded] = useState<string | null>(null)
 
   const activeTask = events.find(
     (event) =>
@@ -102,23 +123,58 @@ export function GateTaskStatus({ systemId, gateKey }: GateTaskStatusProps) {
       isActiveTask(event),
   )
 
-  if (!activeTask) {
+  const succeededTask = events.find(
+    (event) =>
+      event.systemId === systemId &&
+      getGateKeyFromTaskEvent(event) === gateKey &&
+      isSucceededTask(event),
+  )
+
+  const succeededTaskId = succeededTask?.taskId ?? null
+
+  useEffect(() => {
+    if (succeededTaskId) {
+      setShowSucceeded(succeededTaskId)
+      const timer = setTimeout(() => setShowSucceeded(null), 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [succeededTaskId])
+
+  if (!activeTask && !showSucceeded) {
     return null
   }
 
+  const isRunning = !!activeTask && activeTask.status === "running"
+  const hasNumericProgress = typeof activeTask?.progress === "number"
+  const showIndeterminate = isRunning && !hasNumericProgress
+
   return (
-    <div style={containerStyle}>
-      <div style={headerStyle}>
-        <span style={dotStyle} />
-        <span style={titleStyle}>Active Task</span>
-      </div>
-      <div style={messageStyle}>{activeTask.message}</div>
-      {typeof activeTask.progress === "number" && (
-        <div style={progressContainerStyle}>
-          <ProgressBar value={activeTask.progress} />
-          <span style={percentageStyle}>{Math.round(activeTask.progress)}%</span>
+    <>
+      <style>{`
+        @keyframes indeterminate-slide {
+          0% { transform: translateX(-200%); }
+          100% { transform: translateX(350%); }
+        }
+      `}</style>
+      <div style={containerStyle}>
+        <div style={headerStyle}>
+          <span style={dotStyle} />
+          <span style={titleStyle}>{showSucceeded ? "Completed" : "Active Task"}</span>
         </div>
-      )}
-    </div>
+        <div style={messageStyle}>{activeTask?.message ?? "Task completed."}</div>
+        <div style={progressContainerStyle}>
+          {showSucceeded ? (
+            <ProgressBar value={100} />
+          ) : showIndeterminate ? (
+            <ProgressBar value={0} indeterminate />
+          ) : hasNumericProgress ? (
+            <>
+              <ProgressBar value={activeTask!.progress as number} />
+              <span style={percentageStyle}>{Math.round(activeTask!.progress as number)}%</span>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </>
   )
 }

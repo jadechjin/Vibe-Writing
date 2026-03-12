@@ -1,3 +1,5 @@
+"use client"
+
 import { useMemo, useState, type CSSProperties } from "react"
 
 import type { AssetDetail } from "../../hooks/useAnalysis"
@@ -9,9 +11,13 @@ import {
   useConfirmManifest,
   useConfirmAssetQC,
 } from "../../hooks/useManifest"
+import { gateTheme } from "../../styles/gate-theme"
+import { ActionButton } from "../ui/ActionButton"
+import { ConfirmDialog } from "../ui/ConfirmDialog"
+import { EmptyState } from "../ui/EmptyState"
+import { SectionCard } from "../ui/SectionCard"
+import { StatusBadge } from "../ui/StatusBadge"
 import { GateTaskStatus } from "./GateTaskStatus"
-
-// ---- Props ----
 
 export type GateContentPanelProps = Readonly<{
   snapshot: WorkflowSnapshot | null
@@ -24,62 +30,6 @@ type MetadataDraft = {
   sourceDescription: string
   instrumentInfo: string
   sampleIds: string
-}
-
-// ---- Styles ----
-
-const panelStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "14px",
-}
-
-const sectionCardStyle: CSSProperties = {
-  padding: "16px",
-  borderRadius: "14px",
-  border: "1px solid rgba(148, 163, 184, 0.15)",
-  background: "rgba(30, 41, 59, 0.38)",
-}
-
-const titleStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 700,
-  color: "#f8fafc",
-  marginBottom: "8px",
-}
-
-const descStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.6,
-  color: "#94a3b8",
-}
-
-const blockerListStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "6px",
-  marginTop: "8px",
-}
-
-const blockerItemStyle: CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: "8px",
-  border: "1px solid rgba(248, 113, 113, 0.2)",
-  background: "rgba(127, 29, 29, 0.1)",
-  fontSize: "12px",
-  color: "#fca5a5",
-}
-
-const actionBtnStyle: CSSProperties = {
-  padding: "8px 18px",
-  borderRadius: "10px",
-  border: "1px solid rgba(249, 115, 22, 0.5)",
-  background: "rgba(154, 52, 18, 0.15)",
-  fontSize: "13px",
-  fontWeight: 600,
-  color: "#fb923c",
-  cursor: "pointer",
-  alignSelf: "flex-start",
 }
 
 const subTitleStyle: CSSProperties = {
@@ -113,34 +63,11 @@ const tdStyle: CSSProperties = {
   verticalAlign: "top",
 }
 
-const emptyStateStyle: CSSProperties = {
-  padding: "12px",
-  textAlign: "center",
-  color: "#64748b",
-  fontSize: "12px",
-  fontStyle: "italic",
-}
-
-const statusBadgeStyle: CSSProperties = {
-  fontSize: "10px",
-  padding: "2px 6px",
-  borderRadius: "4px",
-  background: "rgba(249, 115, 22, 0.1)",
-  color: "#fb923c",
-  fontWeight: 600,
-}
-
 const metadataFormStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "8px",
   minWidth: "240px",
-}
-
-const fieldGroupStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "4px",
 }
 
 const fieldLabelStyle: CSSProperties = {
@@ -179,6 +106,33 @@ const errorTextStyle: CSSProperties = {
   color: "#fca5a5",
 }
 
+const bulkActionsBarStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "8px 12px",
+  background: "rgba(96, 165, 250, 0.08)",
+  border: "1px solid rgba(96, 165, 250, 0.2)",
+  borderRadius: "8px",
+  marginBottom: "8px",
+}
+
+const blockerListStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "6px",
+  marginTop: "8px",
+}
+
+const blockerItemStyle: CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: "8px",
+  border: "1px solid rgba(248, 113, 113, 0.2)",
+  background: "rgba(127, 29, 29, 0.1)",
+  fontSize: "12px",
+  color: "#fca5a5",
+}
+
 function isDraftStatus(status: string): boolean {
   return status.trim().toLowerCase() === "draft"
 }
@@ -206,29 +160,22 @@ function createMetadataDraft(asset: AssetDetail): MetadataDraft {
 }
 
 function parseSampleIds(value: string): string[] | undefined {
-  const items = value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-
+  const items = value.split(",").map((item) => item.trim()).filter(Boolean)
   return items.length > 0 ? items : undefined
 }
 
-// ---- Component ----
-
 export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
-  const {
-    data: manifest,
-    isLoading: manifestLoading,
-    error: manifestError,
-  } = useManifest(systemId)
+  const { data: manifest, isLoading: manifestLoading, error: manifestError } = useManifest(systemId)
   const { data: assets, isLoading: assetsLoading, error: assetsError } = useAssets(systemId)
 
   const generateManifest = useGenerateManifest(systemId)
   const confirmManifest = useConfirmManifest(systemId)
   const confirmAssetQC = useConfirmAssetQC(systemId)
   const bindAssetMetadata = useBindAssetMetadata(systemId)
+
   const [metadataDrafts, setMetadataDrafts] = useState<Record<string, MetadataDraft>>({})
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set())
+  const [showConfirmManifestDialog, setShowConfirmManifestDialog] = useState(false)
 
   const manifestAssetCount =
     manifest && typeof manifest.manifestJson.assetCount === "number"
@@ -236,11 +183,9 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
       : null
 
   const bindErrorMessage = bindAssetMetadata.error instanceof Error ? bindAssetMetadata.error.message : null
-  const confirmManifestErrorMessage =
-    confirmManifest.error instanceof Error ? confirmManifest.error.message : null
+  const confirmManifestErrorMessage = confirmManifest.error instanceof Error ? confirmManifest.error.message : null
   const confirmQcErrorMessage = confirmAssetQC.error instanceof Error ? confirmAssetQC.error.message : null
-  const generateManifestErrorMessage =
-    generateManifest.error instanceof Error ? generateManifest.error.message : null
+  const generateManifestErrorMessage = generateManifest.error instanceof Error ? generateManifest.error.message : null
 
   const derivedDrafts = useMemo(() => {
     const next: Record<string, MetadataDraft> = {}
@@ -250,21 +195,51 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
     return next
   }, [assets, metadataDrafts])
 
+  const confirmableAssets = useMemo(
+    () => (assets ?? []).filter((a) => getSemanticDescription(a).trim().length > 0 && !isConfirmedStatus(getAssetQcStatus(a))),
+    [assets],
+  )
+
+  const allConfirmableSelected =
+    confirmableAssets.length > 0 && confirmableAssets.every((a) => selectedAssetIds.has(a.id))
+
+  function toggleSelectAll() {
+    if (allConfirmableSelected) {
+      setSelectedAssetIds(new Set())
+    } else {
+      setSelectedAssetIds(new Set(confirmableAssets.map((a) => a.id)))
+    }
+  }
+
+  function toggleAsset(assetId: string) {
+    setSelectedAssetIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(assetId)) {
+        next.delete(assetId)
+      } else {
+        next.add(assetId)
+      }
+      return next
+    })
+  }
+
+  function handleBulkConfirmQC() {
+    for (const assetId of selectedAssetIds) {
+      confirmAssetQC.mutate(assetId)
+    }
+    setSelectedAssetIds(new Set())
+  }
+
   function updateMetadataDraft(asset: AssetDetail, patch: Partial<MetadataDraft>) {
     setMetadataDrafts((prev) => ({
       ...prev,
-      [asset.id]: {
-        ...(prev[asset.id] ?? createMetadataDraft(asset)),
-        ...patch,
-      },
+      [asset.id]: { ...(prev[asset.id] ?? createMetadataDraft(asset)), ...patch },
     }))
   }
 
   function handleSaveMetadata(asset: AssetDetail) {
     const draft = derivedDrafts[asset.id]
-    if (!draft || draft.semanticDescription.trim().length === 0) {
-      return
-    }
+    if (!draft || draft.semanticDescription.trim().length === 0) return
 
     bindAssetMetadata.mutate(
       {
@@ -278,45 +253,44 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
       },
       {
         onSuccess: (updatedAsset) => {
-          setMetadataDrafts((prev) => ({
-            ...prev,
-            [asset.id]: createMetadataDraft(updatedAsset),
-          }))
+          setMetadataDrafts((prev) => ({ ...prev, [asset.id]: createMetadataDraft(updatedAsset) }))
         },
       },
     )
   }
 
   return (
-    <div style={panelStyle}>
+    <div style={gateTheme.panel}>
       <GateTaskStatus systemId={systemId} gateKey="G3" />
-      <div style={sectionCardStyle}>
-        <div style={titleStyle}>Assets Confirmation</div>
-        <div style={descStyle}>
-          确认 Manifest 与资产 QC 状态。全部确认后可推进至 Evidence Matrix 阶段。
-        </div>
 
+      <ConfirmDialog
+        isOpen={showConfirmManifestDialog}
+        title="Confirm Manifest"
+        message="Are you sure you want to confirm this manifest? This action advances the workflow to the Evidence Matrix stage."
+        onConfirm={() => {
+          if (manifest) {
+            confirmManifest.mutate(manifest.id)
+          }
+          setShowConfirmManifestDialog(false)
+        }}
+        onCancel={() => setShowConfirmManifestDialog(false)}
+        isPending={confirmManifest.isPending}
+        confirmLabel="Confirm Manifest"
+      />
+
+      <SectionCard title="Assets Confirmation" description="确认 Manifest 与资产 QC 状态。全部确认后可推进至 Evidence Matrix 阶段。">
         <div style={subTitleStyle}>Latest Manifest</div>
         {manifestLoading ? (
-          <div style={emptyStateStyle}>Loading manifest...</div>
+          <EmptyState text="Loading manifest..." />
         ) : manifestError ? (
-          <div style={{ ...emptyStateStyle, color: "#fca5a5" }}>
-            Error loading manifest: {manifestError instanceof Error ? manifestError.message : "Unknown error"}
-          </div>
+          <EmptyState text={`Error loading manifest: ${manifestError instanceof Error ? manifestError.message : "Unknown error"}`} style={{ color: "#fca5a5" }} />
         ) : !manifest ? (
-          <div style={emptyStateStyle}>No manifest generated yet.</div>
+          <EmptyState text="No manifest generated yet." />
         ) : (
-          <div
-            style={{
-              padding: "10px",
-              background: "rgba(15, 23, 42, 0.4)",
-              borderRadius: "8px",
-              marginBottom: "12px",
-            }}
-          >
+          <div style={{ padding: "10px", background: "rgba(15, 23, 42, 0.4)", borderRadius: "8px", marginBottom: "12px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: "12px", color: "#94a3b8" }}>Version: {manifest.version}</span>
-              <span style={statusBadgeStyle}>{manifest.status}</span>
+              <StatusBadge status={manifest.status} />
             </div>
             {manifestAssetCount !== null ? (
               <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "6px" }}>
@@ -324,14 +298,12 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
               </div>
             ) : null}
             {isDraftStatus(manifest.status) ? (
-              <button
-                type="button"
-                style={{ ...actionBtnStyle, marginTop: "8px", padding: "4px 12px", fontSize: "11px" }}
-                onClick={() => confirmManifest.mutate(manifest.id)}
+              <ActionButton
+                label="Confirm Manifest"
+                onClick={() => setShowConfirmManifestDialog(true)}
                 disabled={confirmManifest.isPending}
-              >
-                {confirmManifest.isPending ? "Confirming..." : "Confirm Manifest"}
-              </button>
+                style={{ marginTop: "8px", padding: "4px 12px", fontSize: "11px" }}
+              />
             ) : null}
           </div>
         )}
@@ -340,160 +312,164 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
         <div style={helperTextStyle}>
           G3 通过前，资产至少需要语义描述；保存元数据后再做 QC 确认更符合 gate 校验语义。
         </div>
-        {assetsLoading ? (
-          <div style={emptyStateStyle}>Loading assets...</div>
-        ) : assetsError ? (
-          <div style={{ ...emptyStateStyle, color: "#fca5a5" }}>
-            Error loading assets: {assetsError instanceof Error ? assetsError.message : "Unknown error"}
-          </div>
-        ) : !assets || assets.length === 0 ? (
-          <div style={emptyStateStyle}>No assets found.</div>
-        ) : (
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>File Name</th>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Metadata</th>
-                <th style={thStyle}>QC Status</th>
-                <th style={thStyle}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map((asset) => {
-                const qcStatus = getAssetQcStatus(asset)
-                const semanticDescription = getSemanticDescription(asset)
-                const metadataReady = semanticDescription.trim().length > 0
-                const draft = derivedDrafts[asset.id] ?? createMetadataDraft(asset)
-                const isSavingMetadata =
-                  bindAssetMetadata.isPending && bindAssetMetadata.variables?.assetId === asset.id
-                const isConfirmingQc =
-                  confirmAssetQC.isPending && confirmAssetQC.variables === asset.id
 
-                return (
-                  <tr key={asset.id}>
-                    <td style={tdStyle}>{asset.fileName}</td>
-                    <td style={tdStyle}>{asset.assetType}</td>
-                    <td style={tdStyle}>
-                      <div style={metadataFormStyle}>
-                        <div style={fieldGroupStyle}>
-                          <label style={fieldLabelStyle}>Semantic Description</label>
-                          <textarea
-                            value={draft.semanticDescription}
-                            onChange={(event) =>
-                              updateMetadataDraft(asset, {
-                                semanticDescription: event.target.value,
-                              })
-                            }
-                            rows={3}
-                            style={textareaStyle}
-                            placeholder="Describe what this asset proves or represents"
+        {assetsLoading ? (
+          <EmptyState text="Loading assets..." />
+        ) : assetsError ? (
+          <EmptyState text={`Error loading assets: ${assetsError instanceof Error ? assetsError.message : "Unknown error"}`} style={{ color: "#fca5a5" }} />
+        ) : !assets || assets.length === 0 ? (
+          <EmptyState text="No assets found." />
+        ) : (
+          <>
+            {selectedAssetIds.size > 0 ? (
+              <div style={bulkActionsBarStyle}>
+                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{selectedAssetIds.size} selected</span>
+                <ActionButton
+                  label={confirmAssetQC.isPending ? "Confirming..." : "Bulk Confirm QC"}
+                  onClick={handleBulkConfirmQC}
+                  disabled={confirmAssetQC.isPending}
+                  isPending={confirmAssetQC.isPending}
+                  style={{ padding: "4px 12px", fontSize: "11px" }}
+                />
+                <ActionButton
+                  label="Clear"
+                  onClick={() => setSelectedAssetIds(new Set())}
+                  variant="secondary"
+                  style={{ padding: "4px 10px", fontSize: "11px" }}
+                />
+              </div>
+            ) : null}
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>
+                    <input
+                      type="checkbox"
+                      checked={allConfirmableSelected}
+                      onChange={toggleSelectAll}
+                      title="Select all confirmable assets"
+                    />
+                  </th>
+                  <th style={thStyle}>File Name</th>
+                  <th style={thStyle}>Type</th>
+                  <th style={thStyle}>Metadata</th>
+                  <th style={thStyle}>QC Status</th>
+                  <th style={thStyle}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assets.map((asset) => {
+                  const qcStatus = getAssetQcStatus(asset)
+                  const semanticDescription = getSemanticDescription(asset)
+                  const metadataReady = semanticDescription.trim().length > 0
+                  const draft = derivedDrafts[asset.id] ?? createMetadataDraft(asset)
+                  const isSavingMetadata = bindAssetMetadata.isPending && bindAssetMetadata.variables?.assetId === asset.id
+                  const isConfirmingQc = confirmAssetQC.isPending && confirmAssetQC.variables === asset.id
+                  const isConfirmed = isConfirmedStatus(qcStatus)
+                  const isSelectable = metadataReady && !isConfirmed
+
+                  return (
+                    <tr key={asset.id}>
+                      <td style={tdStyle}>
+                        <input
+                          type="checkbox"
+                          checked={selectedAssetIds.has(asset.id)}
+                          onChange={() => toggleAsset(asset.id)}
+                          disabled={!isSelectable}
+                        />
+                      </td>
+                      <td style={tdStyle}>{asset.fileName}</td>
+                      <td style={tdStyle}>{asset.assetType}</td>
+                      <td style={tdStyle}>
+                        <div style={metadataFormStyle}>
+                          <div style={gateTheme.fieldGroup}>
+                            <label style={fieldLabelStyle}>Semantic Description</label>
+                            <textarea
+                              value={draft.semanticDescription}
+                              onChange={(event) => updateMetadataDraft(asset, { semanticDescription: event.target.value })}
+                              rows={3}
+                              style={textareaStyle}
+                              placeholder="Describe what this asset proves or represents"
+                            />
+                          </div>
+                          <div style={gateTheme.fieldGroup}>
+                            <label style={fieldLabelStyle}>Source Description</label>
+                            <input
+                              value={draft.sourceDescription}
+                              onChange={(event) => updateMetadataDraft(asset, { sourceDescription: event.target.value })}
+                              style={textInputStyle}
+                              placeholder="Experiment A / imaging batch"
+                            />
+                          </div>
+                          <div style={gateTheme.fieldGroup}>
+                            <label style={fieldLabelStyle}>Instrument Info</label>
+                            <input
+                              value={draft.instrumentInfo}
+                              onChange={(event) => updateMetadataDraft(asset, { instrumentInfo: event.target.value })}
+                              style={textInputStyle}
+                              placeholder="Leica SP8"
+                            />
+                          </div>
+                          <div style={gateTheme.fieldGroup}>
+                            <label style={fieldLabelStyle}>Sample IDs</label>
+                            <input
+                              value={draft.sampleIds}
+                              onChange={(event) => updateMetadataDraft(asset, { sampleIds: event.target.value })}
+                              style={textInputStyle}
+                              placeholder="sample-1, sample-2"
+                            />
+                          </div>
+                          <ActionButton
+                            label={isSavingMetadata ? "Saving..." : "Save Metadata"}
+                            onClick={() => handleSaveMetadata(asset)}
+                            disabled={isSavingMetadata || draft.semanticDescription.trim().length === 0}
+                            isPending={isSavingMetadata}
+                            style={{ padding: "6px 10px", fontSize: "11px" }}
                           />
                         </div>
-                        <div style={fieldGroupStyle}>
-                          <label style={fieldLabelStyle}>Source Description</label>
-                          <input
-                            value={draft.sourceDescription}
-                            onChange={(event) =>
-                              updateMetadataDraft(asset, {
-                                sourceDescription: event.target.value,
-                              })
-                            }
-                            style={textInputStyle}
-                            placeholder="Experiment A / imaging batch"
+                      </td>
+                      <td style={tdStyle}>
+                        {metadataReady ? qcStatus ?? "pending" : "semantic description required"}
+                      </td>
+                      <td style={tdStyle}>
+                        {!metadataReady ? (
+                          <StatusBadge status="Metadata required" variant="error" />
+                        ) : isConfirmed ? (
+                          <StatusBadge status="QC Confirmed" variant="success" />
+                        ) : (
+                          <ActionButton
+                            label={isConfirmingQc ? "Confirming..." : "Confirm QC"}
+                            onClick={() => confirmAssetQC.mutate(asset.id)}
+                            disabled={confirmAssetQC.isPending}
+                            isPending={isConfirmingQc}
+                            style={{ padding: "2px 6px", fontSize: "10px" }}
                           />
-                        </div>
-                        <div style={fieldGroupStyle}>
-                          <label style={fieldLabelStyle}>Instrument Info</label>
-                          <input
-                            value={draft.instrumentInfo}
-                            onChange={(event) =>
-                              updateMetadataDraft(asset, {
-                                instrumentInfo: event.target.value,
-                              })
-                            }
-                            style={textInputStyle}
-                            placeholder="Leica SP8"
-                          />
-                        </div>
-                        <div style={fieldGroupStyle}>
-                          <label style={fieldLabelStyle}>Sample IDs</label>
-                          <input
-                            value={draft.sampleIds}
-                            onChange={(event) =>
-                              updateMetadataDraft(asset, {
-                                sampleIds: event.target.value,
-                              })
-                            }
-                            style={textInputStyle}
-                            placeholder="sample-1, sample-2"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleSaveMetadata(asset)}
-                          style={{ ...actionBtnStyle, padding: "6px 10px", fontSize: "11px" }}
-                          disabled={isSavingMetadata || draft.semanticDescription.trim().length === 0}
-                        >
-                          {isSavingMetadata ? "Saving..." : "Save Metadata"}
-                        </button>
-                      </div>
-                    </td>
-                    <td style={tdStyle}>
-                      {metadataReady ? qcStatus ?? "pending" : "semantic description required"}
-                    </td>
-                    <td style={tdStyle}>
-                      {!metadataReady ? (
-                        <span style={{ ...statusBadgeStyle, background: "rgba(248, 113, 113, 0.1)", color: "#fca5a5" }}>
-                          Metadata required
-                        </span>
-                      ) : isConfirmedStatus(qcStatus) ? (
-                        <span style={{ ...statusBadgeStyle, background: "rgba(52, 211, 153, 0.1)", color: "#34d399" }}>
-                          QC Confirmed
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => confirmAssetQC.mutate(asset.id)}
-                          style={{ ...actionBtnStyle, padding: "2px 6px", fontSize: "10px" }}
-                          disabled={confirmAssetQC.isPending}
-                        >
-                          {isConfirmingQc ? "Confirming..." : "Confirm QC"}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </>
         )}
-      </div>
+      </SectionCard>
 
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" as const }}>
-        <button
-          type="button"
-          style={actionBtnStyle}
+        <ActionButton
+          label={generateManifest.isPending ? "Generating..." : "Generate Manifest"}
           onClick={() => generateManifest.mutate()}
           disabled={generateManifest.isPending}
-        >
-          {generateManifest.isPending ? "Generating..." : "Generate Manifest"}
-        </button>
+          isPending={generateManifest.isPending}
+        />
       </div>
-      {generateManifestErrorMessage ? (
-        <div style={errorTextStyle}>Manifest generation failed: {generateManifestErrorMessage}</div>
-      ) : null}
-      {confirmManifestErrorMessage ? (
-        <div style={errorTextStyle}>Manifest confirmation failed: {confirmManifestErrorMessage}</div>
-      ) : null}
+      {generateManifestErrorMessage ? <div style={errorTextStyle}>Manifest generation failed: {generateManifestErrorMessage}</div> : null}
+      {confirmManifestErrorMessage ? <div style={errorTextStyle}>Manifest confirmation failed: {confirmManifestErrorMessage}</div> : null}
       {bindErrorMessage ? <div style={errorTextStyle}>Metadata save failed: {bindErrorMessage}</div> : null}
       {confirmQcErrorMessage ? <div style={errorTextStyle}>QC confirmation failed: {confirmQcErrorMessage}</div> : null}
 
       {blockers.length > 0 ? (
-        <div style={sectionCardStyle}>
-          <div style={{ ...titleStyle, fontSize: "13px", color: "#fca5a5" }}>
-            Blockers ({blockers.length})
-          </div>
+        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>Blockers ({blockers.length})</span>}>
           <div style={blockerListStyle}>
             {blockers.map((b, i) => (
               <div key={`${b.code}-${i}`} style={blockerItemStyle}>
@@ -501,7 +477,7 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       ) : null}
     </div>
   )

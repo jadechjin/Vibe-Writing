@@ -1,23 +1,17 @@
 "use client"
 
-import { type CSSProperties, useState } from "react"
+import { type CSSProperties, useCallback, useState } from "react"
 import { useParams } from "next/navigation"
 
 import {
   useProjectDetail,
   useCreateSystem,
+  useDeleteSystem,
   type CreateSystemInput,
 } from "../../../hooks/useProjects"
-
-const containerStyle: CSSProperties = {
-  minHeight: "100vh",
-  background:
-    "radial-gradient(circle at top, rgba(30, 64, 175, 0.18), transparent 34%), linear-gradient(180deg, #020617 0%, #0f172a 56%, #111827 100%)",
-  color: "#e2e8f0",
-  padding: "32px 24px",
-  maxWidth: "1440px",
-  margin: "0 auto",
-}
+import { ApiError } from "../../../lib/api"
+import { SystemCard } from "../../../components/dashboard/SystemCard"
+import { ProjectStats } from "../../../components/dashboard/ProjectStats"
 
 const pageStyle: CSSProperties = {
   display: "flex",
@@ -44,14 +38,6 @@ const metaStyle: CSSProperties = {
   marginTop: "4px",
 }
 
-const backLinkStyle: CSSProperties = {
-  fontSize: "13px",
-  color: "#60a5fa",
-  textDecoration: "none",
-  marginBottom: "4px",
-  display: "inline-block",
-}
-
 const sectionTitleStyle: CSSProperties = {
   fontSize: "16px",
   fontWeight: 600,
@@ -62,41 +48,6 @@ const sectionTitleStyle: CSSProperties = {
 const listStyle: CSSProperties = {
   display: "grid",
   gap: "10px",
-}
-
-const systemCardStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "12px",
-  padding: "16px 18px",
-  borderRadius: "14px",
-  border: "1px solid rgba(148, 163, 184, 0.16)",
-  background: "rgba(15, 23, 42, 0.6)",
-  cursor: "pointer",
-  textDecoration: "none",
-  color: "inherit",
-}
-
-const systemNameStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 600,
-  color: "#f8fafc",
-}
-
-const systemMetaStyle: CSSProperties = {
-  fontSize: "12px",
-  color: "#94a3b8",
-}
-
-const badgeStyle: CSSProperties = {
-  padding: "4px 10px",
-  borderRadius: "8px",
-  fontSize: "11px",
-  fontWeight: 600,
-  background: "rgba(249, 115, 22, 0.15)",
-  color: "#fb923c",
-  border: "1px solid rgba(249, 115, 22, 0.3)",
 }
 
 const createBtnStyle: CSSProperties = {
@@ -183,41 +134,41 @@ const submitBtnStyle: CSSProperties = {
   cursor: "pointer",
 }
 
-const infoRowStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: "12px",
-}
-
-const infoBlockStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: "12px",
-  border: "1px solid rgba(148, 163, 184, 0.12)",
-  background: "rgba(15, 23, 42, 0.5)",
-}
-
-const infoLabelStyle: CSSProperties = {
-  fontSize: "11px",
-  fontWeight: 600,
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  color: "#94a3b8",
-  marginBottom: "4px",
-}
-
-const infoValueStyle: CSSProperties = {
-  fontSize: "14px",
-  color: "#e2e8f0",
-}
-
 export default function ProjectPage() {
   const params = useParams<{ projectId: string }>()
   const projectId = params.projectId
   const { data: project, isLoading, error } = useProjectDetail(projectId)
   const createSystem = useCreateSystem(projectId)
+  const deleteSystem = useDeleteSystem(projectId)
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState("")
   const [researchGoal, setResearchGoal] = useState("")
+  const [deleteErrorMsg, setDeleteErrorMsg] = useState<string | null>(null)
+  const [deletingSystemId, setDeletingSystemId] = useState<string | null>(null)
+  const [errorSystemId, setErrorSystemId] = useState<string | null>(null)
+
+  const handleDeleteSystem = useCallback(
+    (systemId: string) => {
+      setDeletingSystemId(systemId)
+      setDeleteErrorMsg(null)
+      setErrorSystemId(null)
+      deleteSystem.mutate(systemId, {
+        onSuccess: () => {
+          setDeletingSystemId(null)
+        },
+        onError: (err: Error) => {
+          const status = err instanceof ApiError ? err.status : 0
+          const msg = status === 409
+            ? "This system has associated data and cannot be deleted. Remove related assets and workflow data first."
+            : err.message
+          setDeleteErrorMsg(msg)
+          setErrorSystemId(systemId)
+          setDeletingSystemId(null)
+        },
+      })
+    },
+    [deleteSystem],
+  )
 
   function handleCreateSystem() {
     if (!title.trim()) {
@@ -239,20 +190,15 @@ export default function ProjectPage() {
   }
 
   if (isLoading) {
-    return <div style={containerStyle}><div style={emptyStyle}>Loading project...</div></div>
+    return <div style={emptyStyle}>Loading project...</div>
   }
 
   if (error || !project) {
-    return <div style={containerStyle}><div style={emptyStyle}>Failed to load project: {error?.message ?? "Not found"}</div></div>
+    return <div style={emptyStyle}>Failed to load project: {error?.message ?? "Not found"}</div>
   }
 
   return (
-    <div style={containerStyle}>
     <div style={pageStyle}>
-      <a href="/projects" style={backLinkStyle}>
-        &larr; All Projects
-      </a>
-
       <div style={headerStyle}>
         <div>
           <div style={titleStyle}>{project.name}</div>
@@ -265,16 +211,11 @@ export default function ProjectPage() {
         </button>
       </div>
 
-      <div style={infoRowStyle}>
-        <div style={infoBlockStyle}>
-          <div style={infoLabelStyle}>Project ID</div>
-          <div style={infoValueStyle}>{project.id}</div>
-        </div>
-        <div style={infoBlockStyle}>
-          <div style={infoLabelStyle}>Created</div>
-          <div style={infoValueStyle}>{new Date(project.createdAt).toLocaleDateString()}</div>
-        </div>
-      </div>
+      <ProjectStats
+        completedSystemCount={project.completedSystemCount}
+        introductionUnlocked={project.introductionUnlocked}
+        totalSystemCount={project.systems.length}
+      />
 
       <div>
         <div style={sectionTitleStyle}>Experimental Systems</div>
@@ -285,21 +226,14 @@ export default function ProjectPage() {
         ) : (
           <div style={listStyle}>
             {project.systems.map((sys) => (
-              <a
+              <SystemCard
                 key={sys.id}
-                href={`/projects/${projectId}/systems/${sys.id}`}
-                style={systemCardStyle}
-              >
-                <div>
-                  <div style={systemNameStyle}>
-                    #{sys.systemNo} {sys.title}
-                  </div>
-                  <div style={systemMetaStyle}>
-                    {sys.sectionCount} section{sys.sectionCount !== 1 ? "s" : ""}
-                  </div>
-                </div>
-                <span style={badgeStyle}>{sys.status}</span>
-              </a>
+                system={sys}
+                projectId={projectId}
+                onDelete={handleDeleteSystem}
+                isDeleting={deletingSystemId === sys.id}
+                deleteError={errorSystemId === sys.id ? deleteErrorMsg : null}
+              />
             ))}
           </div>
         )}
@@ -344,7 +278,6 @@ export default function ProjectPage() {
           </div>
         </div>
       ) : null}
-    </div>
     </div>
   )
 }

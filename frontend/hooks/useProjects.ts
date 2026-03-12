@@ -31,6 +31,8 @@ export type ProjectListItem = {
 export type ProjectDetail = ProjectListItem & {
   thesisSchemaJson: Record<string, unknown>
   systems: ProjectSystemSummary[]
+  completedSystemCount: number
+  introductionUnlocked: boolean
 }
 
 export type CreateProjectInput = {
@@ -115,6 +117,18 @@ export function useCreateSystem(projectId: string) {
         method: "POST",
         body: JSON.stringify(input),
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) })
+    },
+  })
+}
+
+export function useDeleteSystem(projectId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (systemId: string) =>
+      apiRequest<void>(`/systems/${systemId}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) })
     },

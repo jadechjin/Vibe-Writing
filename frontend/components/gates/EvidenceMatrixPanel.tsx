@@ -17,6 +17,11 @@ import {
 } from "../../hooks/useEvidence"
 import type { SystemDetail } from "../../hooks/useProjects"
 import type { Blocker, WorkflowSnapshot } from "../../hooks/useProjectStatus"
+import { gateTheme } from "../../styles/gate-theme"
+import { ActionButton } from "../ui/ActionButton"
+import { EmptyState } from "../ui/EmptyState"
+import { SectionCard } from "../ui/SectionCard"
+import { StatusBadge } from "../ui/StatusBadge"
 import { getLatestClaims, getLatestOutline, getOrderedSystemSections } from "./workbenchSelectors"
 import { GateTaskStatus } from "./GateTaskStatus"
 
@@ -27,44 +32,9 @@ export type GateContentPanelProps = Readonly<{
   systemDetail?: SystemDetail | null
 }>
 
-type BindingDraft = {
-  assetId: string
-  sectionKey: string
-}
-
-type LinkDraft = {
-  assetId: string
-}
-
-type ClaimLinkFeedback = {
-  message: string
-}
-
-const panelStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "14px",
-}
-
-const sectionCardStyle: CSSProperties = {
-  padding: "16px",
-  borderRadius: "14px",
-  border: "1px solid rgba(148, 163, 184, 0.15)",
-  background: "rgba(30, 41, 59, 0.38)",
-}
-
-const titleStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 700,
-  color: "#f8fafc",
-  marginBottom: "8px",
-}
-
-const descStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.6,
-  color: "#94a3b8",
-}
+type BindingDraft = { assetId: string; sectionKey: string }
+type LinkDraft = { assetId: string }
+type ClaimLinkFeedback = { message: string }
 
 const summaryGridStyle: CSSProperties = {
   display: "grid",
@@ -80,12 +50,7 @@ const summaryCardStyle: CSSProperties = {
   background: "rgba(15, 23, 42, 0.35)",
 }
 
-const summaryValueStyle: CSSProperties = {
-  fontSize: "18px",
-  fontWeight: 700,
-  color: "#f8fafc",
-}
-
+const summaryValueStyle: CSSProperties = { fontSize: "18px", fontWeight: 700, color: "#f8fafc" }
 const summaryLabelStyle: CSSProperties = {
   fontSize: "11px",
   color: "#94a3b8",
@@ -94,12 +59,7 @@ const summaryLabelStyle: CSSProperties = {
   marginTop: "4px",
 }
 
-const listStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "10px",
-  marginTop: "12px",
-}
+const listStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }
 
 const itemStyle: CSSProperties = {
   padding: "12px 14px",
@@ -115,91 +75,12 @@ const itemHeaderStyle: CSSProperties = {
   gap: "8px",
 }
 
-const itemTitleStyle: CSSProperties = {
-  fontSize: "13px",
-  fontWeight: 600,
-  color: "#e2e8f0",
-}
+const itemTitleStyle: CSSProperties = { fontSize: "13px", fontWeight: 600, color: "#e2e8f0" }
+const itemMetaStyle: CSSProperties = { fontSize: "12px", color: "#64748b", marginTop: "4px" }
 
-const itemMetaStyle: CSSProperties = {
-  fontSize: "12px",
-  color: "#64748b",
-  marginTop: "4px",
-}
+const actionRowStyle: CSSProperties = { display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }
 
-const actionRowStyle: CSSProperties = {
-  display: "flex",
-  gap: "8px",
-  flexWrap: "wrap",
-  marginTop: "10px",
-}
-
-const actionBtnStyle: CSSProperties = {
-  padding: "8px 18px",
-  borderRadius: "10px",
-  border: "1px solid rgba(249, 115, 22, 0.5)",
-  background: "rgba(154, 52, 18, 0.15)",
-  fontSize: "13px",
-  fontWeight: 600,
-  color: "#fb923c",
-  cursor: "pointer",
-}
-
-const secondaryBtnStyle: CSSProperties = {
-  ...actionBtnStyle,
-  border: "1px solid rgba(148, 163, 184, 0.3)",
-  background: "rgba(51, 65, 85, 0.2)",
-  color: "#cbd5e1",
-}
-
-const badgeStyle = (status: string): CSSProperties => ({
-  display: "inline-block",
-  padding: "2px 8px",
-  borderRadius: "6px",
-  fontSize: "11px",
-  fontWeight: 600,
-  textTransform: "uppercase",
-  background:
-    status === "approved" || status === "confirmed"
-      ? "rgba(34, 197, 94, 0.15)"
-      : "rgba(249, 115, 22, 0.15)",
-  color:
-    status === "approved" || status === "confirmed" ? "#4ade80" : "#fb923c",
-  border: `1px solid ${
-    status === "approved" || status === "confirmed"
-      ? "rgba(34, 197, 94, 0.3)"
-      : "rgba(249, 115, 22, 0.3)"
-  }`,
-})
-
-const blockerListStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "6px",
-  marginTop: "8px",
-}
-
-const blockerItemStyle: CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: "8px",
-  border: "1px solid rgba(248, 113, 113, 0.2)",
-  background: "rgba(127, 29, 29, 0.1)",
-  fontSize: "12px",
-  color: "#fca5a5",
-}
-
-const fieldGroupStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "6px",
-  marginTop: "10px",
-}
-
-const fieldLabelStyle: CSSProperties = {
-  fontSize: "11px",
-  fontWeight: 600,
-  color: "#cbd5e1",
-}
+const fieldLabelStyle: CSSProperties = { fontSize: "11px", fontWeight: 600, color: "#cbd5e1" }
 
 const inputStyle: CSSProperties = {
   width: "100%",
@@ -212,13 +93,7 @@ const inputStyle: CSSProperties = {
   outline: "none",
 }
 
-const helperTextStyle: CSSProperties = {
-  marginTop: "8px",
-  fontSize: "12px",
-  lineHeight: 1.5,
-  color: "#94a3b8",
-}
-
+const helperTextStyle: CSSProperties = { marginTop: "8px", fontSize: "12px", lineHeight: 1.5, color: "#94a3b8" }
 const subSectionTitleStyle: CSSProperties = {
   fontSize: "12px",
   fontWeight: 700,
@@ -227,22 +102,26 @@ const subSectionTitleStyle: CSSProperties = {
   letterSpacing: "0.08em",
 }
 
-const successTextStyle: CSSProperties = {
-  marginTop: "8px",
-  fontSize: "12px",
-  color: "#86efac",
+const successTextStyle: CSSProperties = { marginTop: "8px", fontSize: "12px", color: "#86efac" }
+const errorTextStyle: CSSProperties = { marginTop: "8px", fontSize: "12px", color: "#fca5a5" }
+
+const bulkActionsBarStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "8px 12px",
+  background: "rgba(96, 165, 250, 0.08)",
+  border: "1px solid rgba(96, 165, 250, 0.2)",
+  borderRadius: "8px",
+  marginBottom: "8px",
 }
 
-const emptyStateStyle: CSSProperties = {
-  padding: "12px",
-  textAlign: "center",
-  color: "#64748b",
-  fontSize: "12px",
-  fontStyle: "italic",
-}
-
-const errorTextStyle: CSSProperties = {
-  marginTop: "8px",
+const blockerListStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }
+const blockerItemStyle: CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: "8px",
+  border: "1px solid rgba(248, 113, 113, 0.2)",
+  background: "rgba(127, 29, 29, 0.1)",
   fontSize: "12px",
   color: "#fca5a5",
 }
@@ -258,8 +137,7 @@ export function EvidenceMatrixPanel({
   systemDetail,
 }: GateContentPanelProps) {
   const { data: claims, isLoading: claimsLoading, error: claimsError } = useClaims(systemId)
-  const { data: outlines, isLoading: outlinesLoading, error: outlinesError } =
-    useOutlines(systemId)
+  const { data: outlines, isLoading: outlinesLoading, error: outlinesError } = useOutlines(systemId)
   const { data: assets } = useAssets(systemId)
 
   const generateEvidenceMatrix = useGenerateEvidenceMatrix(systemId)
@@ -275,34 +153,20 @@ export function EvidenceMatrixPanel({
   const sections = useMemo(() => getOrderedSystemSections(systemDetail), [systemDetail])
 
   const sortedClaims = useMemo(() => getLatestClaims(claims), [claims])
-  const approvedClaims = useMemo(
-    () => sortedClaims.filter((claim) => claim.status === "approved"),
-    [sortedClaims],
-  )
-  const pendingClaims = useMemo(
-    () => sortedClaims.filter((claim) => claim.status !== "approved"),
-    [sortedClaims],
-  )
+  const approvedClaims = useMemo(() => sortedClaims.filter((c) => c.status === "approved"), [sortedClaims])
+  const pendingClaims = useMemo(() => sortedClaims.filter((c) => c.status !== "approved"), [sortedClaims])
+  const approvedClaimCount = approvedClaims.length
+  const pendingClaimCount = pendingClaims.length
 
-  const approvedClaimCount = useMemo(
-    () => sortedClaims.filter((claim) => claim.status === "approved").length,
-    [sortedClaims],
+  const assetOptions = useMemo(
+    () => (assets ?? []).map((asset) => ({ id: asset.id, label: `${asset.fileName} · ${asset.assetType}` })),
+    [assets],
   )
-  const pendingClaimCount = sortedClaims.length - approvedClaimCount
-
-  const assetOptions = useMemo(() => {
-    return (assets ?? []).map((asset) => ({
-      id: asset.id,
-      label: `${asset.fileName} · ${asset.assetType}`,
-    }))
-  }, [assets])
-
-  const assetNameById = useMemo(() => {
-    return new Map(assetOptions.map((asset) => [asset.id, asset.label]))
-  }, [assetOptions])
-  const bindingBySectionKey = useMemo(() => {
-    return new Map((latestOutline?.bindings ?? []).map((binding) => [binding.sectionKey, binding]))
-  }, [latestOutline])
+  const assetNameById = useMemo(() => new Map(assetOptions.map((a) => [a.id, a.label])), [assetOptions])
+  const bindingBySectionKey = useMemo(
+    () => new Map((latestOutline?.bindings ?? []).map((b) => [b.sectionKey, b])),
+    [latestOutline],
+  )
 
   const [bindingDraft, setBindingDraft] = useState<BindingDraft>({
     assetId: "",
@@ -311,100 +175,91 @@ export function EvidenceMatrixPanel({
   const [linkDrafts, setLinkDrafts] = useState<Record<string, LinkDraft>>({})
   const [claimLinkFeedback, setClaimLinkFeedback] = useState<Record<string, ClaimLinkFeedback>>({})
   const [bindingFeedback, setBindingFeedback] = useState<string | null>(null)
+  const [selectedClaimIds, setSelectedClaimIds] = useState<Set<string>>(new Set())
 
-  const generateEvidenceError =
-    generateEvidenceMatrix.error instanceof Error
-      ? generateEvidenceMatrix.error.message
-      : null
+  const generateEvidenceError = generateEvidenceMatrix.error instanceof Error ? generateEvidenceMatrix.error.message : null
   const approveClaimError = approveClaim.error instanceof Error ? approveClaim.error.message : null
-  const createLinkError =
-    createClaimLink.error instanceof Error ? createClaimLink.error.message : null
-  const generateOutlineError =
-    generateOutline.error instanceof Error ? generateOutline.error.message : null
-  const confirmOutlineError =
-    confirmOutline.error instanceof Error ? confirmOutline.error.message : null
-  const createBindingError =
-    createOutlineBinding.error instanceof Error ? createOutlineBinding.error.message : null
+  const createLinkError = createClaimLink.error instanceof Error ? createClaimLink.error.message : null
+  const generateOutlineError = generateOutline.error instanceof Error ? generateOutline.error.message : null
+  const confirmOutlineError = confirmOutline.error instanceof Error ? confirmOutline.error.message : null
+  const createBindingError = createOutlineBinding.error instanceof Error ? createOutlineBinding.error.message : null
 
   useEffect(() => {
     setBindingFeedback(null)
   }, [latestOutline?.id, latestOutline?.updatedAt])
+
+  const approvablePendingClaims = pendingClaims
+  const allPendingSelected =
+    approvablePendingClaims.length > 0 && approvablePendingClaims.every((c) => selectedClaimIds.has(c.id))
+
+  function toggleSelectAllPending() {
+    if (allPendingSelected) {
+      setSelectedClaimIds(new Set())
+    } else {
+      setSelectedClaimIds(new Set(approvablePendingClaims.map((c) => c.id)))
+    }
+  }
+
+  function toggleClaim(claimId: string) {
+    setSelectedClaimIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(claimId)) next.delete(claimId)
+      else next.add(claimId)
+      return next
+    })
+  }
+
+  function handleBulkApproveClaims() {
+    for (const claimId of selectedClaimIds) {
+      approveClaim.mutate(claimId)
+    }
+    setSelectedClaimIds(new Set())
+  }
 
   function getLinkDraft(claimId: string): LinkDraft {
     return linkDrafts[claimId] ?? { assetId: "" }
   }
 
   function getKnownBindingMessage(claim: ClaimDetail): string {
-    if (!latestOutline) {
-      return "No confirmed outline context yet. Claim-level history is not fully available."
-    }
-
+    if (!latestOutline) return "No confirmed outline context yet."
     const normalizedSectionRef = normalizeText(claim.sectionRef ?? "")
-    if (!normalizedSectionRef) {
-      return "Claim section is not assigned yet, so outline-bound visibility is unavailable."
-    }
-
+    if (!normalizedSectionRef) return "Claim section is not assigned yet."
     const sectionBinding = bindingBySectionKey.get(normalizedSectionRef)
     if (sectionBinding) {
       return `Known binding: section ${normalizedSectionRef} is currently linked to ${assetNameById.get(sectionBinding.assetId) ?? sectionBinding.assetId}.`
     }
-
-    return "No known outline binding for this section yet. Historical claim-level link truth is limited to current query data and new mutation results."
+    return "No known outline binding for this section yet."
   }
 
   function isClaimBoundToKnownSection(claim: ClaimDetail): boolean {
     const normalizedSectionRef = normalizeText(claim.sectionRef ?? "")
-
     return normalizedSectionRef.length > 0 && bindingBySectionKey.has(normalizedSectionRef)
   }
 
   function updateLinkDraft(claimId: string, patch: Partial<LinkDraft>) {
-    setLinkDrafts((prev) => ({
-      ...prev,
-      [claimId]: {
-        ...getLinkDraft(claimId),
-        ...patch,
-      },
-    }))
+    setLinkDrafts((prev) => ({ ...prev, [claimId]: { ...getLinkDraft(claimId), ...patch } }))
     setClaimLinkFeedback((prev) => {
-      if (!prev[claimId]) {
-        return prev
-      }
-
-      const nextFeedback = { ...prev }
-      delete nextFeedback[claimId]
-      return nextFeedback
+      if (!prev[claimId]) return prev
+      const next = { ...prev }
+      delete next[claimId]
+      return next
     })
   }
 
   function handleCreateLink(claimId: string) {
     const assetId = normalizeText(getLinkDraft(claimId).assetId)
-    if (!assetId) {
-      return
-    }
+    if (!assetId) return
 
-    setClaimLinkFeedback((prev) => {
-      const nextFeedback = { ...prev }
-      delete nextFeedback[claimId]
-      return nextFeedback
-    })
+    setClaimLinkFeedback((prev) => { const next = { ...prev }; delete next[claimId]; return next })
 
     createClaimLink.mutate(
-      {
-        claimId,
-        input: { assetId },
-      },
+      { claimId, input: { assetId } },
       {
         onSuccess: () => {
-          setLinkDrafts((prev) => ({
-            ...prev,
-            [claimId]: { assetId: "" },
-          }))
+          setLinkDrafts((prev) => ({ ...prev, [claimId]: { assetId: "" } }))
           setClaimLinkFeedback((prev) => ({
             ...prev,
-            [claimId]: {
-              message: `Evidence link saved for this claim using ${assetNameById.get(assetId) ?? assetId}.`,
-            },
+            [claimId]: { message: `Evidence link saved using ${assetNameById.get(assetId) ?? assetId}.` },
           }))
         },
       },
@@ -412,178 +267,165 @@ export function EvidenceMatrixPanel({
   }
 
   function handleCreateBinding() {
-    if (!latestOutline) {
-      return
-    }
-
+    if (!latestOutline) return
     const assetId = normalizeText(bindingDraft.assetId)
     const sectionKey = normalizeText(bindingDraft.sectionKey)
-    if (!assetId || !sectionKey) {
-      return
-    }
+    if (!assetId || !sectionKey) return
 
     const existingBinding = bindingBySectionKey.get(sectionKey)
     if (existingBinding) {
-      const existingAssetLabel = assetNameById.get(existingBinding.assetId) ?? existingBinding.assetId
-      const nextAssetLabel = assetNameById.get(assetId) ?? assetId
-
+      const existingLabel = assetNameById.get(existingBinding.assetId) ?? existingBinding.assetId
+      const nextLabel = assetNameById.get(assetId) ?? assetId
       setBindingFeedback(
         existingBinding.assetId === assetId
-          ? `Section ${sectionKey} is already bound to ${existingAssetLabel}.`
-          : `Section ${sectionKey} already has a known binding to ${existingAssetLabel}. Review it before replacing with ${nextAssetLabel}.`,
+          ? `Section ${sectionKey} is already bound to ${existingLabel}.`
+          : `Section ${sectionKey} already has a known binding to ${existingLabel}. Review before replacing with ${nextLabel}.`,
       )
       return
     }
 
     setBindingFeedback(null)
-
     createOutlineBinding.mutate(
-      {
-        outlineId: latestOutline.id,
-        input: {
-          assetId,
-          sectionKey,
-        },
-      },
+      { outlineId: latestOutline.id, input: { assetId, sectionKey } },
       {
         onSuccess: (binding: OutlineAssetBindingDetail) => {
-          setBindingDraft({
-            assetId: "",
-            sectionKey: sections[0]?.sectionKey ?? "",
-          })
-          setBindingFeedback(
-            `Added outline binding for ${binding.sectionKey} using ${assetNameById.get(binding.assetId) ?? binding.assetId}.`,
-          )
+          setBindingDraft({ assetId: "", sectionKey: sections[0]?.sectionKey ?? "" })
+          setBindingFeedback(`Added outline binding for ${binding.sectionKey} using ${assetNameById.get(binding.assetId) ?? binding.assetId}.`)
         },
       },
     )
   }
 
   return (
-    <div style={panelStyle}>
+    <div style={gateTheme.panel}>
       <GateTaskStatus systemId={systemId} gateKey="G4" />
-      <div style={sectionCardStyle}>
-        <div style={titleStyle}>Evidence &amp; Outline</div>
-        <div style={descStyle}>
-          当前状态：{currentState ?? "Unknown"}。先生成 Evidence Matrix，再筛查并批准 claims，随后补证据与提纲绑定，最后确认 Outline。
-        </div>
+
+      <SectionCard
+        title="Evidence &amp; Outline"
+        description={`当前状态：${currentState ?? "Unknown"}。先生成 Evidence Matrix，再筛查并批准 claims，随后补证据与提纲绑定，最后确认 Outline。`}
+      >
         <div style={summaryGridStyle}>
-          <div style={summaryCardStyle}>
-            <div style={summaryValueStyle}>{sortedClaims.length}</div>
-            <div style={summaryLabelStyle}>Claims</div>
-          </div>
-          <div style={summaryCardStyle}>
-            <div style={summaryValueStyle}>{approvedClaimCount}</div>
-            <div style={summaryLabelStyle}>Approved</div>
-          </div>
-          <div style={summaryCardStyle}>
-            <div style={summaryValueStyle}>{pendingClaimCount}</div>
-            <div style={summaryLabelStyle}>Pending</div>
-          </div>
-          <div style={summaryCardStyle}>
-            <div style={summaryValueStyle}>{latestOutline?.bindings.length ?? 0}</div>
-            <div style={summaryLabelStyle}>Bindings</div>
-          </div>
+          {[
+            { value: sortedClaims.length, label: "Claims" },
+            { value: approvedClaimCount, label: "Approved" },
+            { value: pendingClaimCount, label: "Pending" },
+            { value: latestOutline?.bindings.length ?? 0, label: "Bindings" },
+          ].map(({ value, label }) => (
+            <div key={label} style={summaryCardStyle}>
+              <div style={summaryValueStyle}>{value}</div>
+              <div style={summaryLabelStyle}>{label}</div>
+            </div>
+          ))}
         </div>
         <div style={actionRowStyle}>
-          <button
-            type="button"
-            style={actionBtnStyle}
+          <ActionButton
+            label={generateEvidenceMatrix.isPending ? "Generating Evidence Matrix..." : "Generate Evidence Matrix"}
             onClick={() => generateEvidenceMatrix.mutate()}
             disabled={generateEvidenceMatrix.isPending}
-          >
-            {generateEvidenceMatrix.isPending
-              ? "Generating Evidence Matrix..."
-              : "Generate Evidence Matrix"}
-          </button>
-          <button
-            type="button"
-            style={secondaryBtnStyle}
+            isPending={generateEvidenceMatrix.isPending}
+          />
+          <ActionButton
+            label={generateOutline.isPending ? "Generating Outline..." : "Generate Outline"}
             onClick={() => generateOutline.mutate()}
             disabled={generateOutline.isPending || isOutlineConfirmed}
-          >
-            {generateOutline.isPending ? "Generating Outline..." : "Generate Outline"}
-          </button>
+            variant="secondary"
+          />
         </div>
-        {generateEvidenceError ? (
-          <div style={errorTextStyle}>Evidence Matrix 生成失败：{generateEvidenceError}</div>
-        ) : null}
-        {generateOutlineError ? (
-          <div style={errorTextStyle}>Outline 生成失败：{generateOutlineError}</div>
-        ) : null}
-      </div>
+        {generateEvidenceError ? <div style={errorTextStyle}>Evidence Matrix 生成失败：{generateEvidenceError}</div> : null}
+        {generateOutlineError ? <div style={errorTextStyle}>Outline 生成失败：{generateOutlineError}</div> : null}
+      </SectionCard>
 
-      <div style={sectionCardStyle}>
-        <div style={titleStyle}>Claims Review Queue</div>
-        <div style={descStyle}>
-          Claims 会按 latest-only 规则拆成 Approved 与 Pending 两组。claim-level evidence-link 历史没有完整 read model，所以这里只展示当前已知的 section binding 线索与最近一次本地提交结果。
-        </div>
+      <SectionCard
+        title="Claims Review Queue"
+        description="Claims 会按 latest-only 规则拆成 Approved 与 Pending 两组。"
+      >
         {claimsLoading ? (
-          <div style={emptyStateStyle}>Loading claims...</div>
+          <EmptyState text="Loading claims..." />
         ) : claimsError ? (
-          <div style={errorTextStyle}>
-            Claims 加载失败：{claimsError instanceof Error ? claimsError.message : "Unknown error"}
-          </div>
+          <div style={errorTextStyle}>Claims 加载失败：{claimsError instanceof Error ? claimsError.message : "Unknown error"}</div>
         ) : (
           <div style={listStyle}>
+            {selectedClaimIds.size > 0 ? (
+              <div style={bulkActionsBarStyle}>
+                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{selectedClaimIds.size} selected</span>
+                <ActionButton
+                  label={approveClaim.isPending ? "Approving..." : "Bulk Approve Claims"}
+                  onClick={handleBulkApproveClaims}
+                  disabled={approveClaim.isPending}
+                  isPending={approveClaim.isPending}
+                  style={{ padding: "4px 12px", fontSize: "11px" }}
+                />
+                <ActionButton
+                  label="Clear"
+                  onClick={() => setSelectedClaimIds(new Set())}
+                  variant="secondary"
+                  style={{ padding: "4px 10px", fontSize: "11px" }}
+                />
+              </div>
+            ) : null}
+
             {[
-              {
-                key: "approved",
-                title: `Approved (${approvedClaims.length})`,
-                items: approvedClaims,
-              },
-              {
-                key: "pending",
-                title: `Pending (${pendingClaims.length})`,
-                items: pendingClaims,
-              },
+              { key: "approved", title: `Approved (${approvedClaims.length})`, items: approvedClaims },
+              { key: "pending", title: `Pending (${pendingClaims.length})`, items: pendingClaims },
             ].map((group) => (
               <div key={group.key} style={itemStyle}>
-                <div style={subSectionTitleStyle}>{group.title}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  {group.key === "pending" && approvablePendingClaims.length > 0 ? (
+                    <input
+                      type="checkbox"
+                      checked={allPendingSelected}
+                      onChange={toggleSelectAllPending}
+                      title="Select all pending claims"
+                    />
+                  ) : null}
+                  <div style={subSectionTitleStyle}>{group.title}</div>
+                </div>
                 <div style={listStyle}>
                   {group.items.map((claim) => {
                     const linkDraft = getLinkDraft(claim.id)
                     const canBindEvidence = normalizeText(linkDraft.assetId).length > 0
-                    const isApprovingThisClaim =
-                      approveClaim.isPending && approveClaim.variables === claim.id
-                    const isBindingThisClaim =
-                      createClaimLink.isPending && createClaimLink.variables?.claimId === claim.id
+                    const isApprovingThisClaim = approveClaim.isPending && approveClaim.variables === claim.id
+                    const isBindingThisClaim = createClaimLink.isPending && createClaimLink.variables?.claimId === claim.id
                     const linkFeedback = claimLinkFeedback[claim.id] ?? null
                     const knownBinding = isClaimBoundToKnownSection(claim)
+                    const isPending = claim.status !== "approved"
 
                     return (
                       <div key={claim.id} style={itemStyle}>
                         <div style={itemHeaderStyle}>
-                          <div style={itemTitleStyle}>
-                            {claim.claimId}: {claim.statement}
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            {isPending ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedClaimIds.has(claim.id)}
+                                onChange={() => toggleClaim(claim.id)}
+                              />
+                            ) : null}
+                            <div style={itemTitleStyle}>{claim.claimId}: {claim.statement}</div>
                           </div>
-                          <span style={badgeStyle(claim.status)}>{claim.status}</span>
+                          <StatusBadge status={claim.status} />
                         </div>
                         <div style={itemMetaStyle}>Section: {claim.sectionRef ?? "Unassigned"}</div>
                         <div style={itemMetaStyle}>Confidence: {claim.confidenceLevel}</div>
                         {claim.approvedAt ? (
-                          <div style={itemMetaStyle}>
-                            Approved: {new Date(claim.approvedAt).toLocaleString()}
-                          </div>
+                          <div style={itemMetaStyle}>Approved: {new Date(claim.approvedAt).toLocaleString()}</div>
                         ) : null}
                         <div style={helperTextStyle}>
                           {knownBinding ? "Known section binding is available. " : "Known section binding is not available yet. "}
                           {getKnownBindingMessage(claim)}
                         </div>
                         <div style={actionRowStyle}>
-                          {claim.status !== "approved" ? (
-                            <button
-                              type="button"
-                              style={actionBtnStyle}
+                          {isPending ? (
+                            <ActionButton
+                              label={isApprovingThisClaim ? "Approving..." : "Approve Claim"}
                               onClick={() => approveClaim.mutate(claim.id)}
                               disabled={approveClaim.isPending}
-                            >
-                              {isApprovingThisClaim ? "Approving..." : "Approve Claim"}
-                            </button>
+                              isPending={isApprovingThisClaim}
+                            />
                           ) : null}
                         </div>
                         {assetOptions.length > 0 ? (
-                          <div style={fieldGroupStyle}>
+                          <div style={{ ...gateTheme.fieldGroup, marginTop: "10px" }}>
                             <label style={fieldLabelStyle} htmlFor={`claim-link-${claim.id}`}>
                               Bind evidence asset
                             </label>
@@ -591,83 +433,59 @@ export function EvidenceMatrixPanel({
                               id={`claim-link-${claim.id}`}
                               style={inputStyle}
                               value={linkDraft.assetId}
-                              onChange={(event) =>
-                                updateLinkDraft(claim.id, { assetId: event.target.value })
-                              }
+                              onChange={(event) => updateLinkDraft(claim.id, { assetId: event.target.value })}
                             >
                               <option value="">Select an asset</option>
                               {assetOptions.map((asset) => (
-                                <option key={asset.id} value={asset.id}>
-                                  {asset.label}
-                                </option>
+                                <option key={asset.id} value={asset.id}>{asset.label}</option>
                               ))}
                             </select>
-                            <button
-                              type="button"
-                              style={secondaryBtnStyle}
+                            <ActionButton
+                              label={isBindingThisClaim ? "Binding..." : "Create Evidence Link"}
                               onClick={() => handleCreateLink(claim.id)}
                               disabled={!canBindEvidence || createClaimLink.isPending}
-                            >
-                              {isBindingThisClaim ? "Binding..." : "Create Evidence Link"}
-                            </button>
-                            {linkFeedback ? (
-                              <div style={successTextStyle}>{linkFeedback.message}</div>
-                            ) : null}
+                              isPending={isBindingThisClaim}
+                              variant="secondary"
+                            />
+                            {linkFeedback ? <div style={successTextStyle}>{linkFeedback.message}</div> : null}
                           </div>
                         ) : (
-                          <div style={helperTextStyle}>
-                            当前没有可用 asset，先去 G2/G3 补齐数据与资产确认。
-                          </div>
+                          <div style={helperTextStyle}>当前没有可用 asset，先去 G2/G3 补齐数据与资产确认。</div>
                         )}
                       </div>
                     )
                   })}
-                  {group.items.length === 0 ? (
-                    <div style={emptyStateStyle}>No claims in this group yet.</div>
-                  ) : null}
+                  {group.items.length === 0 ? <EmptyState text="No claims in this group yet." /> : null}
                 </div>
               </div>
             ))}
-            {sortedClaims.length === 0 ? (
-              <div style={emptyStateStyle}>No claims generated yet.</div>
-            ) : null}
+            {sortedClaims.length === 0 ? <EmptyState text="No claims generated yet." /> : null}
           </div>
         )}
-        {approveClaimError ? (
-          <div style={errorTextStyle}>Claim 审批失败：{approveClaimError}</div>
-        ) : null}
-        {createLinkError ? (
-          <div style={errorTextStyle}>Evidence 绑定失败：{createLinkError}</div>
-        ) : null}
-      </div>
+        {approveClaimError ? <div style={errorTextStyle}>Claim 审批失败：{approveClaimError}</div> : null}
+        {createLinkError ? <div style={errorTextStyle}>Evidence 绑定失败：{createLinkError}</div> : null}
+      </SectionCard>
 
-      <div style={sectionCardStyle}>
-        <div style={titleStyle}>Outline Strategy</div>
+      <SectionCard title="Outline Strategy">
         {outlinesLoading ? (
-          <div style={emptyStateStyle}>Loading outlines...</div>
+          <EmptyState text="Loading outlines..." />
         ) : outlinesError ? (
-          <div style={errorTextStyle}>
-            Outline 加载失败：{outlinesError instanceof Error ? outlinesError.message : "Unknown error"}
-          </div>
+          <div style={errorTextStyle}>Outline 加载失败：{outlinesError instanceof Error ? outlinesError.message : "Unknown error"}</div>
         ) : latestOutline ? (
           <div style={listStyle}>
             <div style={itemStyle}>
               <div style={itemHeaderStyle}>
                 <div style={itemTitleStyle}>Outline v{latestOutline.version}</div>
-                <span style={badgeStyle(latestOutline.status)}>{latestOutline.status}</span>
+                <StatusBadge status={latestOutline.status} />
               </div>
               <div style={itemMetaStyle}>
                 Based on {latestOutline.generatedFromClaimsJson.length} claims. Updated:{" "}
                 {new Date(latestOutline.updatedAt).toLocaleString()}
               </div>
               {latestOutline.approvedAt ? (
-                <div style={itemMetaStyle}>
-                  Confirmed: {new Date(latestOutline.approvedAt).toLocaleString()}
-                </div>
+                <div style={itemMetaStyle}>Confirmed: {new Date(latestOutline.approvedAt).toLocaleString()}</div>
               ) : null}
-              <div style={itemMetaStyle}>
-                Current bindings: {latestOutline.bindings.length}
-              </div>
+              <div style={itemMetaStyle}>Current bindings: {latestOutline.bindings.length}</div>
               <div style={listStyle}>
                 {sections.map((section) => {
                   const binding = bindingBySectionKey.get(section.sectionKey)
@@ -675,141 +493,93 @@ export function EvidenceMatrixPanel({
                     <div key={section.id} style={itemStyle}>
                       <div style={itemHeaderStyle}>
                         <div style={itemTitleStyle}>{section.title}</div>
-                        {binding ? (
-                          <span style={badgeStyle("confirmed")}>Bound</span>
-                        ) : (
-                          <span style={badgeStyle("pending")}>Waiting</span>
-                        )}
+                        <StatusBadge status={binding ? "Bound" : "Waiting"} variant={binding ? "success" : "pending"} />
                       </div>
                       <div style={itemMetaStyle}>Key: {section.sectionKey}</div>
                       {binding ? (
                         <>
-                          <div style={itemMetaStyle}>
-                            Asset: {assetNameById.get(binding.assetId) ?? binding.assetId}
-                          </div>
-                          {binding.bindingNote ? (
-                            <div style={itemMetaStyle}>Note: {binding.bindingNote}</div>
-                          ) : null}
+                          <div style={itemMetaStyle}>Asset: {assetNameById.get(binding.assetId) ?? binding.assetId}</div>
+                          {binding.bindingNote ? <div style={itemMetaStyle}>Note: {binding.bindingNote}</div> : null}
                         </>
                       ) : (
-                        <div style={emptyStateStyle}>No binding for this section yet.</div>
+                        <EmptyState text="No binding for this section yet." />
                       )}
                     </div>
                   )
                 })}
-                {sections.length === 0 ? (
-                  <div style={emptyStateStyle}>No system sections available.</div>
-                ) : null}
+                {sections.length === 0 ? <EmptyState text="No system sections available." /> : null}
               </div>
               {assetOptions.length > 0 && sections.length > 0 ? (
-                <div style={fieldGroupStyle}>
-                  <label style={fieldLabelStyle} htmlFor="outline-binding-asset-id">
-                    Outline binding asset
-                  </label>
+                <div style={{ ...gateTheme.fieldGroup, marginTop: "10px" }}>
+                  <label style={fieldLabelStyle} htmlFor="outline-binding-asset-id">Outline binding asset</label>
                   <select
                     id="outline-binding-asset-id"
                     style={inputStyle}
                     value={bindingDraft.assetId}
-                    onChange={(event) => {
-                      setBindingDraft((prev) => ({ ...prev, assetId: event.target.value }))
-                      setBindingFeedback(null)
-                    }}
+                    onChange={(event) => { setBindingDraft((prev) => ({ ...prev, assetId: event.target.value })); setBindingFeedback(null) }}
                   >
                     <option value="">Select an asset</option>
-                    {assetOptions.map((asset) => (
-                      <option key={asset.id} value={asset.id}>
-                        {asset.label}
-                      </option>
-                    ))}
+                    {assetOptions.map((asset) => <option key={asset.id} value={asset.id}>{asset.label}</option>)}
                   </select>
-                  <label style={fieldLabelStyle} htmlFor="outline-binding-section-key">
-                    Target section
-                  </label>
+                  <label style={fieldLabelStyle} htmlFor="outline-binding-section-key">Target section</label>
                   <select
                     id="outline-binding-section-key"
                     style={inputStyle}
                     value={bindingDraft.sectionKey}
-                    onChange={(event) => {
-                      setBindingDraft((prev) => ({ ...prev, sectionKey: event.target.value }))
-                      setBindingFeedback(null)
-                    }}
+                    onChange={(event) => { setBindingDraft((prev) => ({ ...prev, sectionKey: event.target.value })); setBindingFeedback(null) }}
                   >
                     <option value="">Select a section</option>
-                    {sections.map((section) => (
-                      <option key={section.id} value={section.sectionKey}>
-                        {section.title}
-                      </option>
-                    ))}
+                    {sections.map((section) => <option key={section.id} value={section.sectionKey}>{section.title}</option>)}
                   </select>
                 </div>
               ) : (
-                <div style={helperTextStyle}>
-                  需要同时有可用 assets 和系统 sections，才能创建 outline binding。
-                </div>
+                <div style={helperTextStyle}>需要同时有可用 assets 和系统 sections，才能创建 outline binding。</div>
               )}
               <div style={actionRowStyle}>
-                <button
-                  type="button"
-                  style={secondaryBtnStyle}
+                <ActionButton
+                  label={createOutlineBinding.isPending ? "Binding..." : "Add Outline Binding"}
                   onClick={handleCreateBinding}
-                  disabled={
-                    createOutlineBinding.isPending ||
-                    !normalizeText(bindingDraft.assetId) ||
-                    !normalizeText(bindingDraft.sectionKey)
-                  }
-                >
-                  {createOutlineBinding.isPending ? "Binding..." : "Add Outline Binding"}
-                </button>
+                  disabled={createOutlineBinding.isPending || !normalizeText(bindingDraft.assetId) || !normalizeText(bindingDraft.sectionKey)}
+                  isPending={createOutlineBinding.isPending}
+                  variant="secondary"
+                />
                 {!isOutlineConfirmed ? (
-                  <button
-                    type="button"
-                    style={actionBtnStyle}
+                  <ActionButton
+                    label={confirmOutline.isPending ? "Confirming..." : "Confirm Outline"}
                     onClick={() => confirmOutline.mutate(latestOutline.id)}
                     disabled={confirmOutline.isPending}
-                  >
-                    {confirmOutline.isPending ? "Confirming..." : "Confirm Outline"}
-                  </button>
+                    isPending={confirmOutline.isPending}
+                  />
                 ) : null}
               </div>
-              {bindingFeedback ? <div style={successTextStyle}>{bindingFeedback}</div> : null}
+              {bindingFeedback ? <div style={{ marginTop: "8px", fontSize: "12px", color: "#86efac" }}>{bindingFeedback}</div> : null}
             </div>
           </div>
         ) : (
           <div style={listStyle}>
             <div style={itemStyle}>
               <div style={itemTitleStyle}>No outline generated yet.</div>
-              <div style={helperTextStyle}>
-                Outline 尚未生成，但当前 system sections 仍会保留可见，方便先检查后续绑定目标。
-              </div>
+              <div style={helperTextStyle}>Outline 尚未生成，但当前 system sections 仍会保留可见，方便先检查后续绑定目标。</div>
             </div>
             {sections.map((section) => (
               <div key={section.id} style={itemStyle}>
                 <div style={itemHeaderStyle}>
                   <div style={itemTitleStyle}>{section.title}</div>
-                  <span style={badgeStyle("pending")}>Waiting</span>
+                  <StatusBadge status="Waiting" variant="pending" />
                 </div>
                 <div style={itemMetaStyle}>Key: {section.sectionKey}</div>
-                <div style={emptyStateStyle}>Generate an outline to start binding assets for this section.</div>
+                <EmptyState text="Generate an outline to start binding assets for this section." />
               </div>
             ))}
-            {sections.length === 0 ? (
-              <div style={emptyStateStyle}>No system sections available.</div>
-            ) : null}
+            {sections.length === 0 ? <EmptyState text="No system sections available." /> : null}
           </div>
         )}
-        {createBindingError ? (
-          <div style={errorTextStyle}>Outline 绑定失败：{createBindingError}</div>
-        ) : null}
-        {confirmOutlineError ? (
-          <div style={errorTextStyle}>Outline 确认失败：{confirmOutlineError}</div>
-        ) : null}
-      </div>
+        {createBindingError ? <div style={errorTextStyle}>Outline 绑定失败：{createBindingError}</div> : null}
+        {confirmOutlineError ? <div style={errorTextStyle}>Outline 确认失败：{confirmOutlineError}</div> : null}
+      </SectionCard>
 
       {blockers.length > 0 ? (
-        <div style={sectionCardStyle}>
-          <div style={{ ...titleStyle, fontSize: "13px", color: "#fca5a5" }}>
-            Blockers ({blockers.length})
-          </div>
+        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>Blockers ({blockers.length})</span>}>
           <div style={blockerListStyle}>
             {blockers.map((blocker, index) => (
               <div key={`${blocker.code}-${index}`} style={blockerItemStyle}>
@@ -817,7 +587,7 @@ export function EvidenceMatrixPanel({
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       ) : null}
     </div>
   )

@@ -98,3 +98,25 @@ export function useConfirmAssetQC(systemId: string) {
     },
   })
 }
+
+export type BatchConfirmAssetQCResponse = {
+  succeeded: string[]
+  failed: Array<{ assetId: string; reason: string }>
+}
+
+export function useBatchConfirmAssetQC(systemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (assetIds: string[]) =>
+      apiRequest<BatchConfirmAssetQCResponse>(`/systems/${systemId}/assets/batch-confirm-qc`, {
+        method: "POST",
+        body: JSON.stringify({ asset_ids: assetIds }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets", systemId] })
+      queryClient.invalidateQueries({ queryKey: manifestKeys.detail(systemId) })
+      queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
+    },
+  })
+}
