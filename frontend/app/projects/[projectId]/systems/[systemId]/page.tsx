@@ -241,6 +241,7 @@ function SystemWorkspacePage({
       snapshot={snapshot}
       latestBlockers={latestBlockers}
       gateKey={selectedGateIsValid ? selectedGate : authoritativeGateKey}
+      systemId={systemId}
     />
   )
 
@@ -274,6 +275,8 @@ function SystemWorkspacePage({
       evidencePanel={evidencePanel}
       workbenchPanel={workbenchPanel}
       statusTray={statusTray}
+      onGateSelect={setSelectedGate}
+      selectedGateKey={selectedGate}
     >
       <div style={headerStyle}>
         <div>

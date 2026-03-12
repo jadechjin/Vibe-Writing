@@ -11,6 +11,7 @@ from app.persistence.models.evidence import (
 )
 from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.project import Project, ProjectMember, ProjectMemberRole, ProjectStatus
+from app.persistence.models.skeleton import StructureSkeleton
 from app.persistence.models.system import ExperimentalSystem, SystemSection
 from app.persistence.models.workflow import ApprovalTask, WorkflowEvent, WorkflowInstance
 
@@ -33,6 +34,7 @@ __all__ = [
     "ProjectStatus",
     "ReviewComment",
     "SectionDraft",
+    "StructureSkeleton",
     "SystemSection",
     "WorkflowEvent",
     "WorkflowInstance",

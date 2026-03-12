@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react"
+import type { GateKey } from "../../lib/gateMapping"
 
 export type GateVisualStatus =
   | "neutral"
@@ -215,7 +216,15 @@ export const DEFAULT_GATE_PLACEHOLDERS: readonly GateNavItem[] = [
   },
 ]
 
-export function GateNav({ gates }: { gates: readonly GateNavItem[] }) {
+export function GateNav({
+  gates,
+  onGateSelect,
+  selectedGateKey,
+}: {
+  gates: readonly GateNavItem[]
+  onGateSelect?: (gateKey: GateKey) => void
+  selectedGateKey?: GateKey | null
+}) {
   return (
     <header style={headerStyle}>
       <div style={headerInnerStyle}>
@@ -225,23 +234,36 @@ export function GateNav({ gates }: { gates: readonly GateNavItem[] }) {
           <span style={subtitleStyle}>G0–G5 门禁驱动的实验体系推进</span>
         </div>
 
-        <nav aria-label="Gate navigation" style={{ flex: "1 1 auto" }}>
+        <nav aria-label="Gate 导航" style={{ flex: "1 1 auto" }}>
           <ol style={gateListStyle}>
             {gates.map((gate) => {
               const token = gateStateTokens[gate.state]
+              const isSelected = selectedGateKey === gate.key && selectedGateKey !== null
+              const isActive = gate.state === "active"
 
               return (
                 <li
                   key={gate.key}
-                  aria-current={gate.state === "active" ? "step" : undefined}
+                  role="button"
+                  tabIndex={0}
+                  aria-current={isActive ? "step" : undefined}
+                  aria-pressed={isSelected}
+                  onClick={() => onGateSelect?.(gate.key as GateKey)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      onGateSelect?.(gate.key as GateKey)
+                    }
+                  }}
                   style={{
                     ...gateCardStyle,
                     background: token.background,
-                    borderColor: token.borderColor,
-                    boxShadow:
-                      gate.state === "active"
-                        ? `0 0 0 1px ${token.accent}`
-                        : undefined,
+                    borderColor: isSelected ? "rgba(251, 191, 36, 0.7)" : token.borderColor,
+                    borderStyle: isSelected ? "dashed" : "solid",
+                    boxShadow: isActive && !isSelected
+                      ? `0 0 0 1px ${token.accent}`
+                      : undefined,
+                    cursor: "pointer",
                   }}
                 >
                   <div style={gateCardHeaderStyle}>

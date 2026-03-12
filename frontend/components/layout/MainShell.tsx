@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react"
 
 import { GateNav, DEFAULT_GATE_PLACEHOLDERS, type GateNavItem } from "./GateNav"
 import { ProjectWorkspace } from "./ProjectWorkspace"
+import type { GateKey } from "../../lib/gateMapping"
 
 type MainShellProps = Readonly<{
   children: ReactNode
@@ -9,6 +10,8 @@ type MainShellProps = Readonly<{
   evidencePanel?: ReactNode
   workbenchPanel?: ReactNode
   statusTray?: ReactNode
+  onGateSelect?: (gateKey: GateKey) => void
+  selectedGateKey?: GateKey | null
 }>
 
 const shellStyle: CSSProperties = {
@@ -30,10 +33,12 @@ export function MainShell({
   evidencePanel,
   workbenchPanel,
   statusTray,
+  onGateSelect,
+  selectedGateKey,
 }: MainShellProps) {
   return (
     <div style={shellStyle}>
-      <GateNav gates={gates} />
+      <GateNav gates={gates} onGateSelect={onGateSelect} selectedGateKey={selectedGateKey} />
       <main style={contentStyle}>
         {children}
         <ProjectWorkspace

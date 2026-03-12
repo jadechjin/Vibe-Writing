@@ -24,11 +24,30 @@ interface StatusBadgeProps {
   style?: CSSProperties
 }
 
+function getStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    approved: "已批准",
+    confirmed: "已确认",
+    pending: "待处理",
+    draft: "草稿",
+    needs_review: "待审阅",
+    completed: "已完成",
+    failed: "失败",
+    succeeded: "成功",
+    rejected: "已拒绝",
+    running: "运行中",
+    queued: "排队中",
+    "已绑定": "已绑定",
+    "等待中": "等待中",
+  }
+  return map[status] ?? status
+}
+
 export function StatusBadge({ status, variant = "auto", style }: StatusBadgeProps) {
   const resolved = variant === "auto" ? inferVariant(status) : variant
   return (
     <span style={{ ...gateTheme.statusBadge, ...variantColors[resolved], ...style }}>
-      {status}
+      {getStatusLabel(status)}
     </span>
   )
 }

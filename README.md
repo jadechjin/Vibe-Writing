@@ -18,10 +18,12 @@
 ## 功能特性
 
 - **G0–G5 门禁推进**：每个阶段必须满足门禁条件才能推进，不允许自由跳步
+- **门禁回溯编辑**：可点击任意已通过门禁查看和编辑内容，软回溯语义不回退状态，下次推进时自动重新校验
+- **G0 迭代结构骨架**：上传参考文献 → AI 生成结构骨架 → 用户反馈 → 迭代修订 → 确认后自动级联 system_sections
 - **Evidence Matrix 唯一事实源**：Draft 只能基于已批准 claims 生成
 - **批量操作支持**：批量审批 claims、批量确认资产 QC
 - **实时任务反馈**：WebSocket 驱动的长任务进度展示与 Toast 通知
-- **异步生成**：Figure Plan、Manifest、Evidence Matrix、Outline、Draft 均异步返回任务句柄
+- **异步生成**：Figure Plan、Manifest、Evidence Matrix、Outline、Draft、结构骨架均异步返回任务句柄
 - **多实验体系管理**：支持同一项目下多个实验体系并行推进
 
 ## 快速开始
@@ -48,37 +50,21 @@ cd frontend && npm install && cd ..
 
 ### 运行
 
-**1. 启动基础设施**
+**一键启动（推荐）**
 
 ```bash
-bash scripts/dev-up.sh
+python dev.py          # 启动全部（基础设施 + 迁移 + 后端 + 前端）
+python dev.py stop     # 停止全部
 ```
 
-启动 PostgreSQL、Redis、MinIO、Temporal。停止：`bash scripts/dev-down.sh`
+脚本自动完成：Docker 基础设施启动 → 等待 PostgreSQL 就绪 → 数据库迁移 → 后端 FastAPI :8000 → 前端 Next.js :3000。首次运行会自动安装依赖并从 `.env.example` 创建 `.env.local`。
 
-**2. 数据库迁移**
+也可单独启动某个组件：
 
 ```bash
-python -m alembic -c backend/alembic.ini upgrade head
-```
-
-**3. 配置前端环境变量**
-
-参考 `frontend/.env.example`：
-
-```env
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
-NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/tasks
-```
-
-**4. 启动服务**
-
-```bash
-# 后端
-uvicorn app.main:app --app-dir backend --reload
-
-# 前端（新终端）
-cd frontend && npm run dev
+python dev.py infra    # 仅基础设施
+python dev.py backend  # 仅后端
+python dev.py frontend # 仅前端
 ```
 
 ## 使用说明
@@ -88,15 +74,18 @@ cd frontend && npm run dev
 单实验体系完整闭环：
 
 ```
-项目创建 → 体系定义(G0) → Figure Plan(G1) → 数据上传/分析(G2)
-→ Manifest/资产确认(G3) → Evidence Matrix + Outline(G4) → Draft 审批(G5)
+项目创建 → 体系定义(G0: 文献上传 + 结构骨架迭代 + 确认) → Figure Plan(G1)
+→ 数据上传/分析(G2) → Manifest/资产确认(G3)
+→ Evidence Matrix + Outline(G4) → Draft 审批(G5)
 ```
+
+任意已通过门禁均可回溯查看和编辑（软回溯，不回退状态）。
 
 门禁映射：
 
 | Gate | 状态条件 |
 |------|---------|
-| G0 | `System_Defined` |
+| G0 | `System_Defined`（需确认结构骨架 + 基础字段填写） |
 | G1 | `Figure_Plan_Ready` |
 | G2 | `Data_Uploaded + Analysis_Ready` |
 | G3 | `Assets_Confirmed` |
@@ -158,9 +147,10 @@ GET /api/systems/{id}/workflow
 
 ```
 .
+├── dev.py                  一键启动/停止开发环境
 ├── backend/                FastAPI + SQLAlchemy + Alembic
 │   ├── app/
-│   │   ├── modules/        业务模块（projects, systems, assets, evidence, drafts...）
+│   │   ├── modules/        业务模块（projects, systems, assets, evidence, skeletons, drafts...）
 │   │   ├── api/            路由聚合
 │   │   ├── realtime/       WebSocket 广播
 │   │   └── workflows/      Temporal workflow 定义
@@ -168,7 +158,7 @@ GET /api/systems/{id}/workflow
 ├── frontend/               Next.js + React Query
 │   ├── app/                页面路由
 │   ├── components/
-│   │   ├── gates/          G0–G5 工作台面板
+│   │   ├── gates/          G0–G5 工作台面板（含 G0Workbench）
 │   │   ├── ui/             共享 UI 原语（ActionButton, SectionCard 等）
 │   │   └── dashboard/      项目仪表盘组件
 │   ├── hooks/              React Query hooks
@@ -225,9 +215,9 @@ G0–G5 全链已基本打通，核心 API 和工作台面板可用。Temporal �
 
 近期：
 
-- G4/G5 面板 smoke test 覆盖（EvidenceMatrixPanel + DraftPanel）
 - G4 workbench 精化：claim 审批分组、binding 状态反馈
 - G5 workbench 精化：draft 分组、折叠预览、决策标记
+- G0 骨架生成器对接真实 AI executor
 
 中期：
 

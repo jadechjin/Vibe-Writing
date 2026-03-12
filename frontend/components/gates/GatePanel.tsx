@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react"
 
 import { WorkflowPanel } from "../drafting/WorkflowPanel"
-import { SystemDefinitionForm } from "./SystemDefinitionForm"
+import { G0Workbench } from "./G0Workbench"
 import { FigurePlanPanel } from "./FigurePlanPanel"
 import { AnalysisPanel } from "./AnalysisPanel"
 import { ManifestPanel } from "./ManifestPanel"
@@ -185,6 +185,27 @@ const containerStyle: CSSProperties = {
   gap: "18px",
 }
 
+const retroactiveBannerStyle: CSSProperties = {
+  padding: "12px 16px",
+  borderRadius: "12px",
+  border: "1px solid rgba(251, 191, 36, 0.4)",
+  background: "rgba(120, 53, 15, 0.18)",
+  fontSize: "13px",
+  color: "#fbbf24",
+  fontWeight: 500,
+}
+
+const lockedPlaceholderStyle: CSSProperties = {
+  padding: "24px 20px",
+  borderRadius: "16px",
+  border: "1px dashed rgba(120, 139, 165, 0.35)",
+  background: "rgba(15, 23, 42, 0.5)",
+  textAlign: "center",
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
+}
+
 const headerCardStyle: CSSProperties = {
   padding: "20px",
   borderRadius: "16px",
@@ -263,14 +284,31 @@ export function GatePanel({
   const currentState = snapshot?.currentState ?? null
   const content = resolveWorkbenchContent(effectiveGateKey, gateVisualState, currentState)
 
+  const isRetroactive = selectedGate != null && selectedGate !== gateKey && gateVisualState === "passed"
+  const isLockedView = gateVisualState === "locked"
+
   const showG0Form = effectiveGateKey === "G0" && (gateVisualState === "active" || gateVisualState === "passed")
-  const g0ReadOnly = gateVisualState === "passed"
+  const g0ReadOnly = false // passed gates are editable in retroactive mode
 
   const systemIdStr = systemId ?? snapshot?.systemId ?? ""
 
   function resolveGatePanel(): ReactNode | null {
-    if (!effectiveGateKey || gateVisualState === "locked" || gateVisualState === "neutral") return null
-    if (effectiveGateKey === "G0") return null // handled by SystemDefinitionForm
+    if (!effectiveGateKey || gateVisualState === "neutral") return null
+
+    if (isLockedView) {
+      return (
+        <div style={lockedPlaceholderStyle}>
+          <div style={{ fontSize: "15px", fontWeight: 700, color: "#8da2bf" }}>
+            {content.title}
+          </div>
+          <div style={{ fontSize: "13px", color: "#64748b" }}>
+            {content.description}
+          </div>
+        </div>
+      )
+    }
+
+    if (effectiveGateKey === "G0") return null // handled by SystemDefinitionForm / G0Workbench
 
     const panelProps = { snapshot, blockers: latestBlockers, systemId: systemIdStr, systemDetail: systemDetail ?? null }
 
@@ -312,10 +350,18 @@ export function GatePanel({
         </div>
       ) : null}
 
-      {/* G0 form, gate panel, or workbench empty state */}
+      {/* Retroactive warning banner */}
+      {isRetroactive ? (
+        <div style={retroactiveBannerStyle}>
+          您正在查看已通过的门禁，修改可能影响下游阶段
+        </div>
+      ) : null}
+
+      {/* G0 workbench, gate panel, or workbench empty state */}
       {showG0Form && onUpdateSystem ? (
-        <SystemDefinitionForm
-          initialData={systemDetail ?? null}
+        <G0Workbench
+          systemId={systemIdStr}
+          systemDetail={systemDetail ?? null}
           blockers={g0ReadOnly ? [] : latestBlockers}
           onSave={onUpdateSystem}
           isReadOnly={g0ReadOnly}

@@ -201,7 +201,15 @@ async def update_analysis_run_status(
     return analysis_run
 
 
+async def delete_asset(session: SessionLike, asset: Asset) -> None:
+    if asset.metadata_entry is not None:
+        await _maybe_await(session.delete(asset.metadata_entry))
+    await _maybe_await(session.delete(asset))
+    await _maybe_await(session.flush())
+
+
 __all__ = [
+    "delete_asset",
     "create_analysis_run",
     "create_asset",
     "create_asset_metadata",

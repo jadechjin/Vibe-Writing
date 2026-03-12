@@ -82,7 +82,7 @@ export function FigurePlanPanel({ systemId, blockers }: GateContentPanelProps) {
                 <div key={plan.id} style={itemCardStyle}>
                   <div style={itemHeaderStyle}>
                     <div style={itemTitleStyle}>
-                      Figure {plan.figureNo}: {plan.title}
+                      图 {plan.figureNo}：{plan.title}
                     </div>
                     <StatusBadge status={plan.status} />
                   </div>

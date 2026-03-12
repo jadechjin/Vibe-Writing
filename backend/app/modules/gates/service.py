@@ -11,6 +11,7 @@ from app.persistence.models.asset import Asset, AssetMetadata
 from app.persistence.models.draft import Outline, OutlineAssetBinding, SectionDraft
 from app.persistence.models.evidence import AnalysisRun, Claim, ClaimEvidenceLink, FigurePlan
 from app.persistence.models.manifest import AssetManifest
+from app.persistence.models.skeleton import StructureSkeleton
 from app.persistence.models.system import ExperimentalSystem, SystemSection
 
 ACTIVE_GATE_BY_STATE: dict[str, GateKey] = {
@@ -62,6 +63,7 @@ def review_gate(
 
 
 def check_system_defined(_session: Session, system: ExperimentalSystem) -> list[Blocker]:
+    blockers: list[Blocker] = []
     missing_fields: list[str] = []
 
     if not _has_text(system.research_goal):
@@ -77,19 +79,36 @@ def check_system_defined(_session: Session, system: ExperimentalSystem) -> list[
     if not system.system_card_json:
         missing_fields.append("system_card_json")
 
-    if not missing_fields:
-        return []
-
-    return [
-        _build_blocker(
-            code="system_definition_incomplete",
-            message="System definition is incomplete.",
-            gate=GateKey.G0,
-            current_state=system.status,
-            required_checks=[GateRequirementKey.SYSTEM_DEFINED],
-            details={"missing_fields": missing_fields},
+    if missing_fields:
+        blockers.append(
+            _build_blocker(
+                code="system_definition_incomplete",
+                message="System definition is incomplete.",
+                gate=GateKey.G0,
+                current_state=system.status,
+                required_checks=[GateRequirementKey.SYSTEM_DEFINED],
+                details={"missing_fields": missing_fields},
+            )
         )
-    ]
+
+    has_confirmed = _session.scalar(
+        select(StructureSkeleton.id)
+        .where(StructureSkeleton.system_id == system.id, StructureSkeleton.status == "confirmed")
+        .limit(1)
+    )
+    if has_confirmed is None:
+        blockers.append(
+            _build_blocker(
+                code="skeleton_not_confirmed",
+                message="No confirmed structure skeleton exists.",
+                gate=GateKey.G0,
+                current_state=system.status,
+                required_checks=[GateRequirementKey.SYSTEM_DEFINED],
+                details={},
+            )
+        )
+
+    return blockers
 
 
 def check_figure_plan_ready(session: Session, system: ExperimentalSystem) -> list[Blocker]:

@@ -32,6 +32,7 @@ from app.modules.assets.service import (
     confirm_manifest as confirm_manifest_service,
     create_analysis_run as create_analysis_run_service,
     create_manifest as create_manifest_service,
+    delete_asset as delete_asset_service,
     get_asset_detail as get_asset_detail_service,
     get_latest_manifest as get_latest_manifest_service,
     get_manifest_task_session_bind,
@@ -56,6 +57,14 @@ async def upload_asset(
 ) -> ApiResponse[AssetDetail]:
     asset = await upload_asset_service(session, payload)
     return ApiResponse(data=asset)
+
+
+@router.delete("/assets/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_asset(
+    asset_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    await delete_asset_service(session, asset_id)
 
 
 @router.get("/assets/{asset_id}", response_model=ApiResponse[AssetDetail])

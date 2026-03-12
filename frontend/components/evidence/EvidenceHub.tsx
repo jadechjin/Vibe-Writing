@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react"
 
 import { EmptyEvidenceState } from "./EmptyEvidenceState"
+import { G0EvidencePanel } from "./G0EvidencePanel"
 import type { WorkflowSnapshot, Blocker } from "../../hooks/useProjectStatus"
 
 // ---- Props ----
@@ -9,6 +10,7 @@ export type EvidenceHubProps = Readonly<{
   snapshot: WorkflowSnapshot | null
   latestBlockers: Blocker[]
   gateKey: string | null
+  systemId?: string
 }>
 
 // ---- Gate-to-evidence content mapping ----
@@ -150,18 +152,22 @@ const blockerCodeStyle: CSSProperties = {
 
 // ---- Component ----
 
-export function EvidenceHub({ snapshot, latestBlockers, gateKey }: EvidenceHubProps) {
+export function EvidenceHub({ snapshot, latestBlockers, gateKey, systemId }: EvidenceHubProps) {
   const currentState = snapshot?.currentState ?? null
   const content = resolveEvidenceContent(gateKey, currentState)
 
   return (
     <div style={containerStyle}>
-      <EmptyEvidenceState
-        title={content.title}
-        description={content.description}
-        nextAction={content.nextAction}
-        hint={content.hint}
-      />
+      {gateKey === "G0" && systemId ? (
+        <G0EvidencePanel systemId={systemId} />
+      ) : (
+        <EmptyEvidenceState
+          title={content.title}
+          description={content.description}
+          nextAction={content.nextAction}
+          hint={content.hint}
+        />
+      )}
 
       {latestBlockers.length > 0 ? (
         <div style={blockerSectionStyle}>

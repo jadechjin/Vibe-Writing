@@ -118,6 +118,19 @@ async def upload_asset(session: SessionLike, payload: AssetUploadRequest) -> Ass
     return _build_asset_detail(stored)
 
 
+async def delete_asset(session: SessionLike, asset_id: str) -> None:
+    asset = await repository.get_asset_by_id(session, asset_id)
+    if asset is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Asset not found",
+            status_code=404,
+            details={"asset_id": asset_id},
+        )
+    await repository.delete_asset(session, asset)
+    await _maybe_await(session.commit())
+
+
 async def get_asset_detail(session: SessionLike, asset_id: str) -> AssetDetail:
     asset = await repository.get_asset_by_id(session, asset_id)
     if asset is None:
@@ -856,6 +869,7 @@ __all__ = [
     "confirm_manifest",
     "create_analysis_run",
     "create_manifest",
+    "delete_asset",
     "get_asset_detail",
     "get_latest_manifest",
     "list_analysis_runs",

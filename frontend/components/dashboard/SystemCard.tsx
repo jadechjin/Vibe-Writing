@@ -239,7 +239,7 @@ export function SystemCard({
               style={deleteBtnStyle}
               onClick={handleDeleteClick}
               disabled={isDeleting}
-              aria-label={`Delete system ${system.title}`}
+              aria-label={`删除体系 ${system.title}`}
             >
               {isDeleting ? "..." : "\u2715"}
             </button>
