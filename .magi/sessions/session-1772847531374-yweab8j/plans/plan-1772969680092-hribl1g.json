@@ -22,5 +22,28 @@
     "status": "approved",
     "reviewer": "system:auto",
     "reviewedAt": 1772969680094
-  }
+  },
+  "schemaVersion": 2,
+  "runtimeVersion": "classic",
+  "revision": 1,
+  "runtime": {
+    "acceptance": {
+      "criteria": [],
+      "summary": "pending",
+      "updatedAt": 1773236718303
+    },
+    "review": {
+      "round": 1,
+      "state": "accepted",
+      "lastReviewedAt": 1772969680094
+    },
+    "replan": {
+      "state": "none"
+    },
+    "wait": {
+      "state": "none"
+    },
+    "termination": {}
+  },
+  "attempts": []
 }

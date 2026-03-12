@@ -159,9 +159,9 @@ export function GateTaskStatus({ systemId, gateKey }: GateTaskStatusProps) {
       <div style={containerStyle}>
         <div style={headerStyle}>
           <span style={dotStyle} />
-          <span style={titleStyle}>{showSucceeded ? "Completed" : "Active Task"}</span>
+          <span style={titleStyle}>{showSucceeded ? "已完成" : "活跃任务"}</span>
         </div>
-        <div style={messageStyle}>{activeTask?.message ?? "Task completed."}</div>
+        <div style={messageStyle}>{activeTask?.message ?? "任务已完成。"}</div>
         <div style={progressContainerStyle}>
           {showSucceeded ? (
             <ProgressBar value={100} />

@@ -15,6 +15,7 @@ from app.modules.projects.schemas import (
     ProjectListItem,
     ProjectSystemSummary,
 )
+from app.common.enums import SystemState
 from app.persistence.models import ExperimentalSystem, Project
 
 SessionLike = AsyncSession | Session
@@ -79,10 +80,15 @@ def _build_project_detail(project: Project) -> ProjectDetail:
         project.systems,
         key=lambda item: (item.system_no, item.created_at, item.id),
     )
+    completed = sum(
+        1 for s in project.systems if s.status == SystemState.CHAPTER_APPROVED.value
+    )
     return ProjectDetail(
         **_build_project_list_item(project).model_dump(),
         thesis_schema_json=project.thesis_schema_json,
         systems=[_build_project_system_summary(system) for system in systems],
+        completed_system_count=completed,
+        introduction_unlocked=completed >= 3,
     )
 
 

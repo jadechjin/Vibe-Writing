@@ -14,6 +14,7 @@ from app.modules.systems.schemas import (
 from app.modules.systems.service import (
     advance_system as advance_system_service,
     create_system as create_system_service,
+    delete_system as delete_system_service,
     get_system_detail as get_system_detail_service,
     get_workflow_snapshot as get_workflow_snapshot_service,
     update_system_definition as update_system_definition_service,
@@ -61,6 +62,17 @@ async def update_system(
 ) -> ApiResponse[SystemDetail]:
     system = await update_system_definition_service(session, system_id, payload)
     return ApiResponse(data=system)
+
+
+@router.delete(
+    "/systems/{system_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_system(
+    system_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    await delete_system_service(session, system_id)
 
 
 @router.post(

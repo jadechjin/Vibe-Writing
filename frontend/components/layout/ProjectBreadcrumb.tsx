@@ -35,7 +35,7 @@ export function ProjectBreadcrumb({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient()
 
   const project = queryClient.getQueryData<ProjectDetail>(["projects", projectId])
-  const projectLabel = project?.name ?? "Project"
+  const projectLabel = project?.name ?? "项目"
 
   const system = systemId
     ? project?.systems.find((s) => s.id === systemId)
@@ -46,13 +46,13 @@ export function ProjectBreadcrumb({ projectId }: { projectId: string }) {
 
   return (
     <nav style={navStyle}>
-      <a href="/projects" style={linkStyle}>Projects</a>
+      <a href="/projects" style={linkStyle}>项目列表</a>
       <span style={separatorStyle}>/</span>
       {systemId ? (
         <>
           <a href={`/projects/${projectId}`} style={linkStyle}>{projectLabel}</a>
           <span style={separatorStyle}>/</span>
-          <span style={currentStyle}>{systemLabel ?? "System"}</span>
+          <span style={currentStyle}>{systemLabel ?? "体系"}</span>
         </>
       ) : (
         <span style={currentStyle}>{projectLabel}</span>

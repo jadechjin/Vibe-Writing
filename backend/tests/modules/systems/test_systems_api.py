@@ -17,7 +17,9 @@ from app.modules.systems.service import advance_system
 from app.modules.tasks.service import TaskWorkflowService
 from app.persistence import get_db_session
 from app.persistence.base import Base
+from app.persistence.models.asset import Asset
 from app.persistence.models.evidence import FigurePlan
+from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.project import Project, ProjectMember, ProjectMemberRole
 from app.persistence.models.system import ExperimentalSystem, SystemSection
 from app.persistence.models.workflow import WorkflowEvent, WorkflowInstance
@@ -66,6 +68,8 @@ ALL_TABLES = [
     ProjectMember.__table__,
     ExperimentalSystem.__table__,
     SystemSection.__table__,
+    Asset.__table__,
+    AssetManifest.__table__,
     FigurePlan.__table__,
     WorkflowInstance.__table__,
     WorkflowEvent.__table__,
@@ -604,3 +608,151 @@ async def test_get_workflow_snapshot_after_advance() -> None:
         await adapter.close()
         Base.metadata.drop_all(eng, tables=DROP_TABLES)
         eng.dispose()
+
+
+# ---- Restricted deletion tests ----
+
+
+def test_delete_empty_system_returns_204(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        session.commit()
+        system_id = system.id
+
+    resp = client.delete(f"/api/systems/{system_id}")
+    assert resp.status_code == 204
+
+    with Session(engine) as session:
+        remaining = session.scalars(select(ExperimentalSystem)).all()
+        assert len(remaining) == 0
+
+
+def test_delete_system_with_assets_returns_409(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        session.add(
+            Asset(
+                project_id=project.id,
+                system_id=system.id,
+                asset_type="image",
+                file_name="fig1.png",
+                storage_key="s3://bucket/fig1.png",
+                uploaded_by="owner-1",
+            )
+        )
+        session.commit()
+        system_id = system.id
+
+    resp = client.delete(f"/api/systems/{system_id}")
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["success"] is False
+    assert "associated data" in body["error"]
+
+
+def test_delete_system_with_manifest_returns_409(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        session.add(
+            AssetManifest(
+                project_id=project.id,
+                system_id=system.id,
+                version=1,
+                status="draft",
+                manifest_json={},
+            )
+        )
+        session.commit()
+        system_id = system.id
+
+    resp = client.delete(f"/api/systems/{system_id}")
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["success"] is False
+    assert "associated data" in body["error"]
+
+
+def test_delete_system_with_workflow_returns_409(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        session.add(
+            WorkflowInstance(
+                project_id=project.id,
+                system_id=system.id,
+                workflow_key="system_advance",
+                current_state="Draft",
+                current_gate="G0",
+                status="queued",
+                version=1,
+            )
+        )
+        session.commit()
+        system_id = system.id
+
+    resp = client.delete(f"/api/systems/{system_id}")
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["success"] is False
+
+
+def test_delete_nonexistent_system_returns_404(client: TestClient) -> None:
+    resp = client.delete("/api/systems/nonexistent-id")
+    assert resp.status_code == 404
+
+
+# ---- system_no concurrent safety test ----
+
+
+def test_create_system_with_duplicate_system_no_returns_409(
+    client: TestClient, engine
+) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        _create_system(session, project_id=project.id, system_no=1, title="Existing")
+        session.commit()
+        project_id = project.id
+
+    # Manually insert a system_no=2 so the next auto-computed no (2) will collide
+    with Session(engine) as session:
+        session.add(
+            ExperimentalSystem(
+                project_id=project_id,
+                system_no=2,
+                title="Sneaky",
+            )
+        )
+        session.commit()
+
+    # The service will compute next_no = max(2) + 1 = 3, but let's force a collision
+    # by pre-inserting system_no=3 right before the API call
+    with Session(engine) as session:
+        session.add(
+            ExperimentalSystem(
+                project_id=project_id,
+                system_no=3,
+                title="Collision Target",
+            )
+        )
+        session.commit()
+
+    # Now max system_no is 3, next computed = 4 which won't collide...
+    # To truly test IntegrityError, we patch get_next_system_no to return an existing no
+    from unittest.mock import patch
+
+    with patch(
+        "app.modules.systems.service.repository.get_next_system_no",
+        return_value=1,  # already exists
+    ):
+        resp = client.post(
+            f"/api/projects/{project_id}/systems",
+            json={"title": "Colliding System"},
+        )
+
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["success"] is False
+    assert "conflict" in body["error"].lower() or "retry" in body["error"].lower()

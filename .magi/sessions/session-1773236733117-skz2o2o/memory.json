@@ -1,0 +1,26 @@
+{
+  "sessionId": "session-1773236733117-skz2o2o",
+  "sessionName": "这个项目目前进行到什么程度了",
+  "created": "2026-03-11T13:45:49.100Z",
+  "lastUpdated": "2026-03-11T13:45:49.404Z",
+  "tokenEstimate": 176,
+  "primaryIntent": "这个项目目前进行到什么程度了",
+  "userConstraints": [],
+  "userMessages": [
+    {
+      "content": "这个项目目前进行到什么程度了",
+      "timestamp": "2026-03-11T13:45:49.103Z",
+      "isKeyInstruction": false
+    }
+  ],
+  "currentTasks": [],
+  "completedTasks": [],
+  "currentWork": "",
+  "nextSteps": [],
+  "keyDecisions": [],
+  "codeChanges": [],
+  "importantContext": [],
+  "pendingIssues": [],
+  "resolvedIssues": [],
+  "rejectedApproaches": []
+}

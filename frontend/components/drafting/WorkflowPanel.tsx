@@ -122,15 +122,15 @@ const blockerMsgStyle: CSSProperties = {
 function formatWorkflowStatus(status: string): string {
   switch (status) {
     case "running":
-      return "Running"
+      return "运行中"
     case "completed":
-      return "Completed"
+      return "已完成"
     case "failed":
-      return "Failed"
+      return "失败"
     case "paused":
-      return "Paused"
+      return "已暂停"
     case "waiting_user":
-      return "Waiting for User"
+      return "等待用户"
     default:
       return status
   }
@@ -146,7 +146,7 @@ export function WorkflowPanel({
   if (!snapshot) {
     return (
       <div style={emptyStyle}>
-        Workflow 尚未启动，点击 "Advance Gate" 开始推进。
+        Workflow 尚未启动，点击"推进 Gate"开始推进。
       </div>
     )
   }
@@ -155,22 +155,22 @@ export function WorkflowPanel({
     <div style={containerStyle}>
       {/* Snapshot summary */}
       <div style={cardStyle}>
-        <div style={sectionLabelStyle}>Workflow Snapshot</div>
+        <div style={sectionLabelStyle}>工作流快照</div>
         <div style={fieldRowStyle}>
           <div>
-            <div style={fieldLabelStyle}>State</div>
+            <div style={fieldLabelStyle}>状态</div>
             <div style={fieldValueStyle}>{snapshot.currentState}</div>
           </div>
           <div>
-            <div style={fieldLabelStyle}>Gate</div>
+            <div style={fieldLabelStyle}>门禁</div>
             <div style={fieldValueStyle}>{snapshot.currentGate ?? "N/A"}</div>
           </div>
           <div>
-            <div style={fieldLabelStyle}>Status</div>
+            <div style={fieldLabelStyle}>运行状态</div>
             <div style={fieldValueStyle}>{formatWorkflowStatus(snapshot.status)}</div>
           </div>
           <div>
-            <div style={fieldLabelStyle}>Version</div>
+            <div style={fieldLabelStyle}>版本</div>
             <div style={fieldValueStyle}>{snapshot.version}</div>
           </div>
         </div>
@@ -179,7 +179,7 @@ export function WorkflowPanel({
       {/* Latest event */}
       {latestEvent ? (
         <div>
-          <div style={sectionLabelStyle}>Latest Event</div>
+          <div style={sectionLabelStyle}>最新事件</div>
           <div style={eventCardStyle}>
             <span style={eventTypeBadgeStyle}>{latestEvent.eventType}</span>
             <span style={eventMessageStyle}>{latestEvent.message}</span>
@@ -193,7 +193,7 @@ export function WorkflowPanel({
       {/* Latest blockers */}
       {latestBlockers.length > 0 ? (
         <div>
-          <div style={sectionLabelStyle}>Blockers</div>
+          <div style={sectionLabelStyle}>阻塞项</div>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             {latestBlockers.map((blocker, idx) => (
               <div key={`${blocker.code}-${idx}`} style={blockerCardStyle}>
@@ -208,7 +208,7 @@ export function WorkflowPanel({
       {/* Last error */}
       {snapshot.lastError ? (
         <div style={{ fontSize: "13px", color: "#f87171" }}>
-          Last error: {snapshot.lastError}
+          最近错误：{snapshot.lastError}
         </div>
       ) : null}
     </div>

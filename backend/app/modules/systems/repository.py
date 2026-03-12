@@ -7,7 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload
 
+from app.persistence.models.asset import Asset
+from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.system import ExperimentalSystem, SystemSection
+from app.persistence.models.workflow import WorkflowInstance
 
 SessionLike = AsyncSession | Session
 T = TypeVar("T")
@@ -109,10 +112,30 @@ async def update_system_fields(
     return system
 
 
+async def has_associated_data(session: SessionLike, system_id: str) -> bool:
+    for model in (Asset, AssetManifest, WorkflowInstance):
+        stmt = select(func.count()).select_from(model).where(model.system_id == system_id)
+        result = await _maybe_await(session.execute(stmt))
+        if result.scalar_one() > 0:
+            return True
+    return False
+
+
+async def delete_system_by_id(session: SessionLike, system_id: str) -> None:
+    stmt = select(ExperimentalSystem).where(ExperimentalSystem.id == system_id)
+    result = await _maybe_await(session.execute(stmt))
+    system = result.scalar_one_or_none()
+    if system is not None:
+        await _maybe_await(session.delete(system))
+        await _maybe_await(session.flush())
+
+
 __all__ = [
     "create_system",
     "create_system_sections",
+    "delete_system_by_id",
     "get_next_system_no",
     "get_system_by_id",
+    "has_associated_data",
     "update_system_fields",
 ]

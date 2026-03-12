@@ -5,6 +5,7 @@ from inspect import isawaitable
 from typing import Any, TypeVar
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -72,24 +73,47 @@ async def create_system(
         )
 
     system_no = await repository.get_next_system_no(session, project_id)
-    system = await repository.create_system(
-        session,
-        project_id=project_id,
-        system_no=system_no,
-        title=payload.title,
-        research_goal=payload.research_goal,
-        samples_subjects=payload.samples_subjects,
-        variables_controls=payload.variables_controls,
-        output_metrics=payload.output_metrics,
-        methods_summary=payload.methods_summary,
-        system_card_json=payload.system_card_json,
-    )
-    await repository.create_system_sections(
-        session,
-        system_id=system.id,
-        sections=_resolve_system_sections(project.thesis_schema_json),
-    )
-    await _maybe_await(session.commit())
+    try:
+        system = await repository.create_system(
+            session,
+            project_id=project_id,
+            system_no=system_no,
+            title=payload.title,
+            research_goal=payload.research_goal,
+            samples_subjects=payload.samples_subjects,
+            variables_controls=payload.variables_controls,
+            output_metrics=payload.output_metrics,
+            methods_summary=payload.methods_summary,
+            system_card_json=payload.system_card_json,
+        )
+
+        # Idempotency check: only create sections if none exist
+        from app.modules.evidence import repository as evidence_repo
+
+        existing_sections = await evidence_repo.list_system_sections(session, system.id)
+        if not existing_sections:
+            await repository.create_system_sections(
+                session,
+                system_id=system.id,
+                sections=_resolve_system_sections(project.thesis_schema_json),
+            )
+
+        await _maybe_await(session.commit())
+    except IntegrityError as exc:
+        await _maybe_await(session.rollback())
+        exc_text = str(exc)
+        is_system_no_conflict = (
+            "uq_experimental_systems_project_system_no" in exc_text
+            or "experimental_systems.project_id, experimental_systems.system_no" in exc_text
+        )
+        if is_system_no_conflict:
+            raise AppException(
+                code=ErrorCode.CONFLICT.value,
+                message="System number conflict, please retry",
+                status_code=409,
+                details={"project_id": project_id},
+            )
+        raise
 
     stored = await repository.get_system_by_id(session, system.id)
     if stored is None:
@@ -100,6 +124,32 @@ async def create_system(
             details={"system_id": system.id},
         )
     return _build_system_detail(stored)
+
+
+async def delete_system(
+    session: SessionLike,
+    system_id: str,
+) -> None:
+    system = await repository.get_system_by_id(session, system_id)
+    if system is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="System not found",
+            status_code=404,
+            details={"system_id": system_id},
+        )
+
+    has_data = await repository.has_associated_data(session, system_id)
+    if has_data:
+        raise AppException(
+            code=ErrorCode.CONFLICT.value,
+            message="System has associated data and cannot be deleted",
+            status_code=409,
+            details={"system_id": system_id},
+        )
+
+    await repository.delete_system_by_id(session, system_id)
+    await _maybe_await(session.commit())
 
 
 async def get_system_detail(
@@ -533,6 +583,7 @@ def _get_sync_session(session: SessionLike) -> Session:
 __all__ = [
     "advance_system",
     "create_system",
+    "delete_system",
     "get_system_detail",
     "get_workflow_snapshot",
     "update_system_definition",

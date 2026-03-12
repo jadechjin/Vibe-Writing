@@ -1,6 +1,7 @@
 "use client"
 
 import { type CSSProperties, useState } from "react"
+import Link from "next/link"
 
 import { useProjectList, useCreateProject, type CreateProjectInput } from "../../hooks/useProjects"
 
@@ -182,11 +183,11 @@ export default function ProjectsPage() {
   }
 
   if (isLoading) {
-    return <div style={containerStyle}><div style={emptyStyle}>Loading projects...</div></div>
+    return <div style={containerStyle}><div style={emptyStyle}>加载项目中...</div></div>
   }
 
   if (error) {
-    return <div style={containerStyle}><div style={emptyStyle}>Failed to load projects: {error.message}</div></div>
+    return <div style={containerStyle}><div style={emptyStyle}>加载项目失败：{error.message}</div></div>
   }
 
   return (
@@ -194,20 +195,20 @@ export default function ProjectsPage() {
     <div style={pageStyle}>
       <div style={headerStyle}>
         <div>
-          <div style={titleStyle}>Projects</div>
-          <div style={subtitleStyle}>Select a project to enter its workspace</div>
+          <div style={titleStyle}>项目列表</div>
+          <div style={subtitleStyle}>选择一个项目进入工作区</div>
         </div>
         <button type="button" style={createBtnStyle} onClick={() => setShowForm(true)}>
-          + New Project
+          + 新建项目
         </button>
       </div>
 
       {!projects || projects.length === 0 ? (
-        <div style={emptyStyle}>No projects yet. Create one to get started.</div>
+        <div style={emptyStyle}>暂无项目，创建一个开始吧。</div>
       ) : (
         <div style={listStyle}>
           {projects.map((project) => (
-            <a
+            <Link
               key={project.id}
               href={`/projects/${project.id}`}
               style={cardStyle}
@@ -215,11 +216,11 @@ export default function ProjectsPage() {
               <div>
                 <div style={cardNameStyle}>{project.name}</div>
                 <div style={cardMetaStyle}>
-                  {project.systemCount} system{project.systemCount !== 1 ? "s" : ""} | Owner: {project.ownerId}
+                  {project.systemCount} 个实验体系 | 负责人：{project.ownerId}
                 </div>
               </div>
               <span style={badgeStyle}>{project.status}</span>
-            </a>
+            </Link>
           ))}
         </div>
       )}
@@ -228,17 +229,17 @@ export default function ProjectsPage() {
         <div style={formOverlayStyle} onClick={() => setShowForm(false)}>
           <div style={formCardStyle} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: "18px", fontWeight: 700, color: "#f8fafc" }}>
-              Create Project
+              创建项目
             </div>
             <input
               style={inputStyle}
-              placeholder="Project name"
+              placeholder="项目名称"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
             <input
               style={inputStyle}
-              placeholder="Owner ID"
+              placeholder="负责人 ID"
               value={ownerId}
               onChange={(e) => setOwnerId(e.target.value)}
             />
@@ -249,7 +250,7 @@ export default function ProjectsPage() {
             ) : null}
             <div style={formActionsStyle}>
               <button type="button" style={cancelBtnStyle} onClick={() => setShowForm(false)}>
-                Cancel
+                取消
               </button>
               <button
                 type="button"
@@ -257,7 +258,7 @@ export default function ProjectsPage() {
                 onClick={handleCreate}
                 disabled={createProject.isPending}
               >
-                {createProject.isPending ? "Creating..." : "Create"}
+                {createProject.isPending ? "创建中..." : "创建"}
               </button>
             </div>
           </div>

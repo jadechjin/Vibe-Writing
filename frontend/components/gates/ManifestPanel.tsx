@@ -265,8 +265,8 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
 
       <ConfirmDialog
         isOpen={showConfirmManifestDialog}
-        title="Confirm Manifest"
-        message="Are you sure you want to confirm this manifest? This action advances the workflow to the Evidence Matrix stage."
+        title="确认 Manifest"
+        message="确定要确认此 Manifest 吗？此操作将推进工作流至证据矩阵阶段。"
         onConfirm={() => {
           if (manifest) {
             confirmManifest.mutate(manifest.id)
@@ -275,31 +275,31 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
         }}
         onCancel={() => setShowConfirmManifestDialog(false)}
         isPending={confirmManifest.isPending}
-        confirmLabel="Confirm Manifest"
+        confirmLabel="确认 Manifest"
       />
 
-      <SectionCard title="Assets Confirmation" description="确认 Manifest 与资产 QC 状态。全部确认后可推进至 Evidence Matrix 阶段。">
-        <div style={subTitleStyle}>Latest Manifest</div>
+      <SectionCard title="资产确认" description="确认 Manifest 与资产 QC 状态。全部确认后可推进至 Evidence Matrix 阶段。">
+        <div style={subTitleStyle}>最新 Manifest</div>
         {manifestLoading ? (
-          <EmptyState text="Loading manifest..." />
+          <EmptyState text="加载 Manifest 中..." />
         ) : manifestError ? (
-          <EmptyState text={`Error loading manifest: ${manifestError instanceof Error ? manifestError.message : "Unknown error"}`} style={{ color: "#fca5a5" }} />
+          <EmptyState text={`加载 Manifest 失败：${manifestError instanceof Error ? manifestError.message : "未知错误"}`} style={{ color: "#fca5a5" }} />
         ) : !manifest ? (
-          <EmptyState text="No manifest generated yet." />
+          <EmptyState text="尚未生成 Manifest。" />
         ) : (
           <div style={{ padding: "10px", background: "rgba(15, 23, 42, 0.4)", borderRadius: "8px", marginBottom: "12px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "12px", color: "#94a3b8" }}>Version: {manifest.version}</span>
+              <span style={{ fontSize: "12px", color: "#94a3b8" }}>版本：{manifest.version}</span>
               <StatusBadge status={manifest.status} />
             </div>
             {manifestAssetCount !== null ? (
               <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "6px" }}>
-                Assets in manifest: {manifestAssetCount}
+                Manifest 中的资产数：{manifestAssetCount}
               </div>
             ) : null}
             {isDraftStatus(manifest.status) ? (
               <ActionButton
-                label="Confirm Manifest"
+                label="确认 Manifest"
                 onClick={() => setShowConfirmManifestDialog(true)}
                 disabled={confirmManifest.isPending}
                 style={{ marginTop: "8px", padding: "4px 12px", fontSize: "11px" }}
@@ -308,7 +308,7 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
           </div>
         )}
 
-        <div style={subTitleStyle}>Assets Metadata &amp; QC</div>
+        <div style={subTitleStyle}>资产元数据与 QC</div>
         <div style={helperTextStyle}>
           G3 通过前，资产至少需要语义描述；保存元数据后再做 QC 确认更符合 gate 校验语义。
         </div>
@@ -316,23 +316,23 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
         {assetsLoading ? (
           <EmptyState text="Loading assets..." />
         ) : assetsError ? (
-          <EmptyState text={`Error loading assets: ${assetsError instanceof Error ? assetsError.message : "Unknown error"}`} style={{ color: "#fca5a5" }} />
+          <EmptyState text={`Error loading assets: ${assetsError instanceof Error ? assetsError.message : "未知错误"}`} style={{ color: "#fca5a5" }} />
         ) : !assets || assets.length === 0 ? (
           <EmptyState text="No assets found." />
         ) : (
           <>
             {selectedAssetIds.size > 0 ? (
               <div style={bulkActionsBarStyle}>
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{selectedAssetIds.size} selected</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{selectedAssetIds.size} 已选</span>
                 <ActionButton
-                  label={confirmAssetQC.isPending ? "Confirming..." : "Bulk Confirm QC"}
+                  label={confirmAssetQC.isPending ? "确认中..." : "批量确认 QC"}
                   onClick={handleBulkConfirmQC}
                   disabled={confirmAssetQC.isPending}
                   isPending={confirmAssetQC.isPending}
                   style={{ padding: "4px 12px", fontSize: "11px" }}
                 />
                 <ActionButton
-                  label="Clear"
+                  label="清除"
                   onClick={() => setSelectedAssetIds(new Set())}
                   variant="secondary"
                   style={{ padding: "4px 10px", fontSize: "11px" }}
@@ -347,14 +347,14 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
                       type="checkbox"
                       checked={allConfirmableSelected}
                       onChange={toggleSelectAll}
-                      title="Select all confirmable assets"
+                      title="全选可确认资产"
                     />
                   </th>
-                  <th style={thStyle}>File Name</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Metadata</th>
-                  <th style={thStyle}>QC Status</th>
-                  <th style={thStyle}>Action</th>
+                  <th style={thStyle}>文件名</th>
+                  <th style={thStyle}>类型</th>
+                  <th style={thStyle}>元数据</th>
+                  <th style={thStyle}>QC 状态</th>
+                  <th style={thStyle}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -383,26 +383,26 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
                       <td style={tdStyle}>
                         <div style={metadataFormStyle}>
                           <div style={gateTheme.fieldGroup}>
-                            <label style={fieldLabelStyle}>Semantic Description</label>
+                            <label style={fieldLabelStyle}>语义描述</label>
                             <textarea
                               value={draft.semanticDescription}
                               onChange={(event) => updateMetadataDraft(asset, { semanticDescription: event.target.value })}
                               rows={3}
                               style={textareaStyle}
-                              placeholder="Describe what this asset proves or represents"
+                              placeholder="描述该资产证明或代表的内容"
                             />
                           </div>
                           <div style={gateTheme.fieldGroup}>
-                            <label style={fieldLabelStyle}>Source Description</label>
+                            <label style={fieldLabelStyle}>来源描述</label>
                             <input
                               value={draft.sourceDescription}
                               onChange={(event) => updateMetadataDraft(asset, { sourceDescription: event.target.value })}
                               style={textInputStyle}
-                              placeholder="Experiment A / imaging batch"
+                              placeholder="实验 A / 成像批次"
                             />
                           </div>
                           <div style={gateTheme.fieldGroup}>
-                            <label style={fieldLabelStyle}>Instrument Info</label>
+                            <label style={fieldLabelStyle}>仪器信息</label>
                             <input
                               value={draft.instrumentInfo}
                               onChange={(event) => updateMetadataDraft(asset, { instrumentInfo: event.target.value })}
@@ -411,7 +411,7 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
                             />
                           </div>
                           <div style={gateTheme.fieldGroup}>
-                            <label style={fieldLabelStyle}>Sample IDs</label>
+                            <label style={fieldLabelStyle}>样本 ID</label>
                             <input
                               value={draft.sampleIds}
                               onChange={(event) => updateMetadataDraft(asset, { sampleIds: event.target.value })}
@@ -420,7 +420,7 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
                             />
                           </div>
                           <ActionButton
-                            label={isSavingMetadata ? "Saving..." : "Save Metadata"}
+                            label={isSavingMetadata ? "保存中..." : "保存元数据"}
                             onClick={() => handleSaveMetadata(asset)}
                             disabled={isSavingMetadata || draft.semanticDescription.trim().length === 0}
                             isPending={isSavingMetadata}
@@ -429,16 +429,16 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
                         </div>
                       </td>
                       <td style={tdStyle}>
-                        {metadataReady ? qcStatus ?? "pending" : "semantic description required"}
+                        {metadataReady ? qcStatus ?? "待确认" : "需要语义描述"}
                       </td>
                       <td style={tdStyle}>
                         {!metadataReady ? (
-                          <StatusBadge status="Metadata required" variant="error" />
+                          <StatusBadge status="需要元数据" variant="error" />
                         ) : isConfirmed ? (
-                          <StatusBadge status="QC Confirmed" variant="success" />
+                          <StatusBadge status="QC 已确认" variant="success" />
                         ) : (
                           <ActionButton
-                            label={isConfirmingQc ? "Confirming..." : "Confirm QC"}
+                            label={isConfirmingQc ? "确认中..." : "确认 QC"}
                             onClick={() => confirmAssetQC.mutate(asset.id)}
                             disabled={confirmAssetQC.isPending}
                             isPending={isConfirmingQc}
@@ -457,19 +457,19 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
 
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" as const }}>
         <ActionButton
-          label={generateManifest.isPending ? "Generating..." : "Generate Manifest"}
+          label={generateManifest.isPending ? "生成中..." : "生成 Manifest"}
           onClick={() => generateManifest.mutate()}
           disabled={generateManifest.isPending}
           isPending={generateManifest.isPending}
         />
       </div>
-      {generateManifestErrorMessage ? <div style={errorTextStyle}>Manifest generation failed: {generateManifestErrorMessage}</div> : null}
-      {confirmManifestErrorMessage ? <div style={errorTextStyle}>Manifest confirmation failed: {confirmManifestErrorMessage}</div> : null}
-      {bindErrorMessage ? <div style={errorTextStyle}>Metadata save failed: {bindErrorMessage}</div> : null}
-      {confirmQcErrorMessage ? <div style={errorTextStyle}>QC confirmation failed: {confirmQcErrorMessage}</div> : null}
+      {generateManifestErrorMessage ? <div style={errorTextStyle}>Manifest 生成失败：{generateManifestErrorMessage}</div> : null}
+      {confirmManifestErrorMessage ? <div style={errorTextStyle}>Manifest 确认失败：{confirmManifestErrorMessage}</div> : null}
+      {bindErrorMessage ? <div style={errorTextStyle}>元数据保存失败：{bindErrorMessage}</div> : null}
+      {confirmQcErrorMessage ? <div style={errorTextStyle}>QC 确认失败：{confirmQcErrorMessage}</div> : null}
 
       {blockers.length > 0 ? (
-        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>Blockers ({blockers.length})</span>}>
+        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>阻塞项 ({blockers.length})</span>}>
           <div style={blockerListStyle}>
             {blockers.map((b, i) => (
               <div key={`${b.code}-${i}`} style={blockerItemStyle}>

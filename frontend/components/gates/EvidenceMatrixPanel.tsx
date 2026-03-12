@@ -221,14 +221,14 @@ export function EvidenceMatrixPanel({
   }
 
   function getKnownBindingMessage(claim: ClaimDetail): string {
-    if (!latestOutline) return "No confirmed outline context yet."
+    if (!latestOutline) return "尚无已确认的提纲上下文。"
     const normalizedSectionRef = normalizeText(claim.sectionRef ?? "")
-    if (!normalizedSectionRef) return "Claim section is not assigned yet."
+    if (!normalizedSectionRef) return "Claim 章节尚未分配。"
     const sectionBinding = bindingBySectionKey.get(normalizedSectionRef)
     if (sectionBinding) {
-      return `Known binding: section ${normalizedSectionRef} is currently linked to ${assetNameById.get(sectionBinding.assetId) ?? sectionBinding.assetId}.`
+      return `已知绑定：章节 ${normalizedSectionRef} 当前关联至 ${assetNameById.get(sectionBinding.assetId) ?? sectionBinding.assetId}。`
     }
-    return "No known outline binding for this section yet."
+    return "该章节尚无已知提纲绑定。"
   }
 
   function isClaimBoundToKnownSection(claim: ClaimDetail): boolean {
@@ -259,7 +259,7 @@ export function EvidenceMatrixPanel({
           setLinkDrafts((prev) => ({ ...prev, [claimId]: { assetId: "" } }))
           setClaimLinkFeedback((prev) => ({
             ...prev,
-            [claimId]: { message: `Evidence link saved using ${assetNameById.get(assetId) ?? assetId}.` },
+            [claimId]: { message: `证据链接已保存，使用 ${assetNameById.get(assetId) ?? assetId}。` },
           }))
         },
       },
@@ -278,8 +278,8 @@ export function EvidenceMatrixPanel({
       const nextLabel = assetNameById.get(assetId) ?? assetId
       setBindingFeedback(
         existingBinding.assetId === assetId
-          ? `Section ${sectionKey} is already bound to ${existingLabel}.`
-          : `Section ${sectionKey} already has a known binding to ${existingLabel}. Review before replacing with ${nextLabel}.`,
+          ? `章节 ${sectionKey} 已绑定至 ${existingLabel}。`
+          : `章节 ${sectionKey} 已有绑定至 ${existingLabel}，替换为 ${nextLabel} 前请先审查。`,
       )
       return
     }
@@ -290,7 +290,7 @@ export function EvidenceMatrixPanel({
       {
         onSuccess: (binding: OutlineAssetBindingDetail) => {
           setBindingDraft({ assetId: "", sectionKey: sections[0]?.sectionKey ?? "" })
-          setBindingFeedback(`Added outline binding for ${binding.sectionKey} using ${assetNameById.get(binding.assetId) ?? binding.assetId}.`)
+          setBindingFeedback(`已添加提纲绑定：${binding.sectionKey}，使用 ${assetNameById.get(binding.assetId) ?? binding.assetId}。`)
         },
       },
     )
@@ -301,15 +301,15 @@ export function EvidenceMatrixPanel({
       <GateTaskStatus systemId={systemId} gateKey="G4" />
 
       <SectionCard
-        title="Evidence &amp; Outline"
+        title="证据与提纲"
         description={`当前状态：${currentState ?? "Unknown"}。先生成 Evidence Matrix，再筛查并批准 claims，随后补证据与提纲绑定，最后确认 Outline。`}
       >
         <div style={summaryGridStyle}>
           {[
             { value: sortedClaims.length, label: "Claims" },
-            { value: approvedClaimCount, label: "Approved" },
-            { value: pendingClaimCount, label: "Pending" },
-            { value: latestOutline?.bindings.length ?? 0, label: "Bindings" },
+            { value: approvedClaimCount, label: "已批准" },
+            { value: pendingClaimCount, label: "待处理" },
+            { value: latestOutline?.bindings.length ?? 0, label: "绑定数" },
           ].map(({ value, label }) => (
             <div key={label} style={summaryCardStyle}>
               <div style={summaryValueStyle}>{value}</div>
@@ -319,13 +319,13 @@ export function EvidenceMatrixPanel({
         </div>
         <div style={actionRowStyle}>
           <ActionButton
-            label={generateEvidenceMatrix.isPending ? "Generating Evidence Matrix..." : "Generate Evidence Matrix"}
+            label={generateEvidenceMatrix.isPending ? "生成证据矩阵中..." : "生成证据矩阵"}
             onClick={() => generateEvidenceMatrix.mutate()}
             disabled={generateEvidenceMatrix.isPending}
             isPending={generateEvidenceMatrix.isPending}
           />
           <ActionButton
-            label={generateOutline.isPending ? "Generating Outline..." : "Generate Outline"}
+            label={generateOutline.isPending ? "生成提纲中..." : "生成提纲"}
             onClick={() => generateOutline.mutate()}
             disabled={generateOutline.isPending || isOutlineConfirmed}
             variant="secondary"
@@ -336,27 +336,27 @@ export function EvidenceMatrixPanel({
       </SectionCard>
 
       <SectionCard
-        title="Claims Review Queue"
+        title="Claims 审查队列"
         description="Claims 会按 latest-only 规则拆成 Approved 与 Pending 两组。"
       >
         {claimsLoading ? (
-          <EmptyState text="Loading claims..." />
+          <EmptyState text="加载 Claims 中..." />
         ) : claimsError ? (
-          <div style={errorTextStyle}>Claims 加载失败：{claimsError instanceof Error ? claimsError.message : "Unknown error"}</div>
+          <div style={errorTextStyle}>Claims 加载失败：{claimsError instanceof Error ? claimsError.message : "未知错误"}</div>
         ) : (
           <div style={listStyle}>
             {selectedClaimIds.size > 0 ? (
               <div style={bulkActionsBarStyle}>
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{selectedClaimIds.size} selected</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8" }}>已选 {selectedClaimIds.size} 项</span>
                 <ActionButton
-                  label={approveClaim.isPending ? "Approving..." : "Bulk Approve Claims"}
+                  label={approveClaim.isPending ? "批准中..." : "批量批准 Claims"}
                   onClick={handleBulkApproveClaims}
                   disabled={approveClaim.isPending}
                   isPending={approveClaim.isPending}
                   style={{ padding: "4px 12px", fontSize: "11px" }}
                 />
                 <ActionButton
-                  label="Clear"
+                  label="清除"
                   onClick={() => setSelectedClaimIds(new Set())}
                   variant="secondary"
                   style={{ padding: "4px 10px", fontSize: "11px" }}
@@ -365,8 +365,8 @@ export function EvidenceMatrixPanel({
             ) : null}
 
             {[
-              { key: "approved", title: `Approved (${approvedClaims.length})`, items: approvedClaims },
-              { key: "pending", title: `Pending (${pendingClaims.length})`, items: pendingClaims },
+              { key: "approved", title: `已批准 (${approvedClaims.length})`, items: approvedClaims },
+              { key: "pending", title: `待处理 (${pendingClaims.length})`, items: pendingClaims },
             ].map((group) => (
               <div key={group.key} style={itemStyle}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -375,7 +375,7 @@ export function EvidenceMatrixPanel({
                       type="checkbox"
                       checked={allPendingSelected}
                       onChange={toggleSelectAllPending}
-                      title="Select all pending claims"
+                      title="全选待处理 Claims"
                     />
                   ) : null}
                   <div style={subSectionTitleStyle}>{group.title}</div>
@@ -405,19 +405,19 @@ export function EvidenceMatrixPanel({
                           </div>
                           <StatusBadge status={claim.status} />
                         </div>
-                        <div style={itemMetaStyle}>Section: {claim.sectionRef ?? "Unassigned"}</div>
-                        <div style={itemMetaStyle}>Confidence: {claim.confidenceLevel}</div>
+                        <div style={itemMetaStyle}>章节：{claim.sectionRef ?? "未分配"}</div>
+                        <div style={itemMetaStyle}>置信度：{claim.confidenceLevel}</div>
                         {claim.approvedAt ? (
-                          <div style={itemMetaStyle}>Approved: {new Date(claim.approvedAt).toLocaleString()}</div>
+                          <div style={itemMetaStyle}>批准时间：{new Date(claim.approvedAt).toLocaleString()}</div>
                         ) : null}
                         <div style={helperTextStyle}>
-                          {knownBinding ? "Known section binding is available. " : "Known section binding is not available yet. "}
+                          {knownBinding ? "已有章节绑定。" : "尚无章节绑定。"}
                           {getKnownBindingMessage(claim)}
                         </div>
                         <div style={actionRowStyle}>
                           {isPending ? (
                             <ActionButton
-                              label={isApprovingThisClaim ? "Approving..." : "Approve Claim"}
+                              label={isApprovingThisClaim ? "批准中..." : "批准 Claim"}
                               onClick={() => approveClaim.mutate(claim.id)}
                               disabled={approveClaim.isPending}
                               isPending={isApprovingThisClaim}
@@ -427,7 +427,7 @@ export function EvidenceMatrixPanel({
                         {assetOptions.length > 0 ? (
                           <div style={{ ...gateTheme.fieldGroup, marginTop: "10px" }}>
                             <label style={fieldLabelStyle} htmlFor={`claim-link-${claim.id}`}>
-                              Bind evidence asset
+                              绑定证据资产
                             </label>
                             <select
                               id={`claim-link-${claim.id}`}
@@ -435,13 +435,13 @@ export function EvidenceMatrixPanel({
                               value={linkDraft.assetId}
                               onChange={(event) => updateLinkDraft(claim.id, { assetId: event.target.value })}
                             >
-                              <option value="">Select an asset</option>
+                              <option value="">选择资产</option>
                               {assetOptions.map((asset) => (
                                 <option key={asset.id} value={asset.id}>{asset.label}</option>
                               ))}
                             </select>
                             <ActionButton
-                              label={isBindingThisClaim ? "Binding..." : "Create Evidence Link"}
+                              label={isBindingThisClaim ? "绑定中..." : "创建证据链接"}
                               onClick={() => handleCreateLink(claim.id)}
                               disabled={!canBindEvidence || createClaimLink.isPending}
                               isPending={isBindingThisClaim}
@@ -455,20 +455,20 @@ export function EvidenceMatrixPanel({
                       </div>
                     )
                   })}
-                  {group.items.length === 0 ? <EmptyState text="No claims in this group yet." /> : null}
+                  {group.items.length === 0 ? <EmptyState text="该分组暂无 Claims。" /> : null}
                 </div>
               </div>
             ))}
-            {sortedClaims.length === 0 ? <EmptyState text="No claims generated yet." /> : null}
+            {sortedClaims.length === 0 ? <EmptyState text="尚未生成 Claims。" /> : null}
           </div>
         )}
         {approveClaimError ? <div style={errorTextStyle}>Claim 审批失败：{approveClaimError}</div> : null}
         {createLinkError ? <div style={errorTextStyle}>Evidence 绑定失败：{createLinkError}</div> : null}
       </SectionCard>
 
-      <SectionCard title="Outline Strategy">
+      <SectionCard title="提纲策略">
         {outlinesLoading ? (
-          <EmptyState text="Loading outlines..." />
+          <EmptyState text="加载提纲中..." />
         ) : outlinesError ? (
           <div style={errorTextStyle}>Outline 加载失败：{outlinesError instanceof Error ? outlinesError.message : "Unknown error"}</div>
         ) : latestOutline ? (

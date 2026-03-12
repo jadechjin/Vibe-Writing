@@ -83,7 +83,7 @@ export function ProjectStats({
   return (
     <div style={containerStyle}>
       <div style={statCardStyle}>
-        <div style={labelStyle}>System Completion</div>
+        <div style={labelStyle}>体系完成度</div>
         <div style={valueRowStyle}>
           <span
             style={{
@@ -93,10 +93,10 @@ export function ProjectStats({
           >
             {completedSystemCount}
           </span>
-          <span style={unitStyle}>/ {REQUIRED_COUNT} required</span>
+          <span style={unitStyle}>/ {REQUIRED_COUNT} 个必需</span>
         </div>
         <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
-          {totalSystemCount} total system{totalSystemCount !== 1 ? "s" : ""} created
+          共创建 {totalSystemCount} 个实验体系
         </div>
         <div style={progressTrackStyle}>
           <div
@@ -112,7 +112,7 @@ export function ProjectStats({
       </div>
 
       <div style={statCardStyle}>
-        <div style={labelStyle}>Introduction &amp; Conclusion</div>
+        <div style={labelStyle}>绪论与结论</div>
         <div
           style={{
             ...unlockBadgeBaseStyle,
@@ -125,12 +125,12 @@ export function ProjectStats({
             color: introductionUnlocked ? "#4ade80" : "#94a3b8",
           }}
         >
-          {introductionUnlocked ? "Unlocked" : "Locked"}
+          {introductionUnlocked ? "已解锁" : "未解锁"}
         </div>
         <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px" }}>
           {introductionUnlocked
-            ? "You may begin writing the introduction and conclusion chapters."
-            : `Complete ${REQUIRED_COUNT - completedSystemCount} more system${REQUIRED_COUNT - completedSystemCount !== 1 ? "s" : ""} to unlock.`}
+            ? "可以开始撰写绪论和结论章节。"
+            : `还需完成 ${REQUIRED_COUNT - completedSystemCount} 个体系才能解锁。`}
         </div>
       </div>
     </div>

@@ -66,13 +66,13 @@ export function FigurePlanPanel({ systemId, blockers }: GateContentPanelProps) {
   return (
     <div style={gateTheme.panel}>
       <GateTaskStatus systemId={systemId} gateKey="G1" />
-      <SectionCard title="Figure Plan" description="管理 Figure Plan 的生成与确认。确认后可推进至数据上传阶段。">
+      <SectionCard title="图表规划" description="管理 Figure Plan 的生成与确认。确认后可推进至数据上传阶段。">
         {isLoading ? (
-          <EmptyState text="Loading plans..." />
+          <EmptyState text="加载规划中..." />
         ) : error ? (
-          <EmptyState text={`Error loading plans: ${error instanceof Error ? error.message : "Unknown error"}`} style={{ color: "#fca5a5" }} />
+          <EmptyState text={`加载规划失败：${error instanceof Error ? error.message : "未知错误"}`} style={{ color: "#fca5a5" }} />
         ) : !hasPlans ? (
-          <EmptyState text="No figure plans generated yet." />
+          <EmptyState text="尚未生成图表规划。" />
         ) : (
           <div style={listStyle}>
             {figurePlans.map((plan) => {
@@ -89,7 +89,7 @@ export function FigurePlanPanel({ systemId, blockers }: GateContentPanelProps) {
                   {plan.claimText ? <div style={itemDescStyle}>{plan.claimText}</div> : null}
                   {isDraftStatus(plan.status) ? (
                     <ActionButton
-                      label={isConfirmingPlan ? "Confirming..." : "Confirm Plan"}
+                      label={isConfirmingPlan ? "确认中..." : "确认规划"}
                       onClick={() => confirmPlan.mutate(plan.id)}
                       disabled={confirmPlan.isPending}
                       isPending={isConfirmingPlan}
@@ -105,17 +105,17 @@ export function FigurePlanPanel({ systemId, blockers }: GateContentPanelProps) {
 
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" as const }}>
         <ActionButton
-          label={generatePlan.isPending ? "Generating..." : "Generate Figure Plan"}
+          label={generatePlan.isPending ? "生成中..." : "生成图表规划"}
           onClick={() => generatePlan.mutate()}
           disabled={generatePlan.isPending}
           isPending={generatePlan.isPending}
         />
       </div>
-      {generatePlanErrorMessage ? <div style={errorTextStyle}>Figure plan generation failed: {generatePlanErrorMessage}</div> : null}
-      {confirmPlanErrorMessage ? <div style={errorTextStyle}>Figure plan confirmation failed: {confirmPlanErrorMessage}</div> : null}
+      {generatePlanErrorMessage ? <div style={errorTextStyle}>图表规划生成失败：{generatePlanErrorMessage}</div> : null}
+      {confirmPlanErrorMessage ? <div style={errorTextStyle}>图表规划确认失败：{confirmPlanErrorMessage}</div> : null}
 
       {blockers.length > 0 ? (
-        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>Blockers ({blockers.length})</span>}>
+        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>阻塞项 ({blockers.length})</span>}>
           <div style={blockerListStyle}>
             {blockers.map((b, i) => (
               <div key={`${b.code}-${i}`} style={blockerItemStyle}>

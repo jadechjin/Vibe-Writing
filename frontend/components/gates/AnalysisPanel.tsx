@@ -113,7 +113,7 @@ function normalizeText(value: string): string {
 }
 
 function describeAssetStatus(qcStatus: string | undefined): string {
-  if (!qcStatus) return "Metadata pending"
+  if (!qcStatus) return "元数据待填"
   return `QC ${qcStatus}`
 }
 
@@ -165,20 +165,20 @@ export function AnalysisPanel({ systemId, snapshot, blockers }: GateContentPanel
       <SectionCard
         title={
           <span>
-            Data &amp; Analysis
+            数据与分析
             {currentState ? <StatusBadge status={currentState} style={{ marginLeft: "8px" }} /> : null}
           </span>
         }
         description="上传实验数据、触发分析任务。分析完成后可推进至资产确认。"
       >
-        <div style={subTitleStyle}>Record Uploaded Asset</div>
+        <div style={subTitleStyle}>记录上传资产</div>
         <div style={helperTextStyle}>
           当前接口记录资产条目而不是直接上传二进制文件。请填写文件名、存储路径和资产类型。
         </div>
         <div style={formGridStyle}>
           {(["assetType", "fileName", "storageKey", "mimeType", "uploadedBy"] as const).map((key) => (
             <div key={key} style={gateTheme.fieldGroup}>
-              <label style={fieldLabelStyle}>{key === "assetType" ? "Asset Type" : key === "fileName" ? "File Name" : key === "storageKey" ? "Storage Key" : key === "mimeType" ? "MIME Type" : "Uploaded By"}</label>
+              <label style={fieldLabelStyle}>{key === "assetType" ? "资产类型" : key === "fileName" ? "文件名" : key === "storageKey" ? "存储路径" : key === "mimeType" ? "MIME 类型" : "上传者"}</label>
               <input
                 value={uploadForm[key]}
                 onChange={(event) => updateUploadForm(key, event.target.value)}
@@ -190,28 +190,28 @@ export function AnalysisPanel({ systemId, snapshot, blockers }: GateContentPanel
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" as const, marginTop: "12px" }}>
           <ActionButton
-            label={uploadAsset.isPending ? "Adding Asset..." : "Add Asset"}
+            label={uploadAsset.isPending ? "添加中..." : "添加资产"}
             onClick={handleUploadAsset}
             disabled={!canSubmitUpload}
             isPending={uploadAsset.isPending}
           />
         </div>
-        {uploadErrorMessage ? <div style={errorTextStyle}>Asset upload failed: {uploadErrorMessage}</div> : null}
+        {uploadErrorMessage ? <div style={errorTextStyle}>资产上传失败：{uploadErrorMessage}</div> : null}
 
-        <div style={subTitleStyle}>Uploaded Assets</div>
+        <div style={subTitleStyle}>已上传资产</div>
         {assetsLoading ? (
-          <EmptyState text="Loading assets..." />
+          <EmptyState text="加载资产中..." />
         ) : assetsError ? (
-          <EmptyState text={`Error loading assets: ${assetsError instanceof Error ? assetsError.message : "Unknown error"}`} style={{ color: "#fca5a5" }} />
+          <EmptyState text={`加载资产失败：${assetsError instanceof Error ? assetsError.message : "未知错误"}`} style={{ color: "#fca5a5" }} />
         ) : !assets || assets.length === 0 ? (
-          <EmptyState text="No assets uploaded yet." />
+          <EmptyState text="尚未上传资产。" />
         ) : (
           <table style={tableStyle}>
             <thead>
               <tr>
-                <th style={thStyle}>File Name</th>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Status</th>
+                <th style={thStyle}>文件名</th>
+                <th style={thStyle}>类型</th>
+                <th style={thStyle}>状态</th>
               </tr>
             </thead>
             <tbody>
@@ -226,23 +226,23 @@ export function AnalysisPanel({ systemId, snapshot, blockers }: GateContentPanel
           </table>
         )}
 
-        <div style={subTitleStyle}>Analysis Runs</div>
+        <div style={subTitleStyle}>分析任务</div>
         <div style={helperTextStyle}>
           当前面板仅展示分析任务状态。G2 的完成以真实后端分析结果为准，不在这里提供手动完成入口。
         </div>
         {runsLoading ? (
-          <EmptyState text="Loading runs..." />
+          <EmptyState text="加载分析任务中..." />
         ) : runsError ? (
-          <EmptyState text={`Error loading runs: ${runsError instanceof Error ? runsError.message : "Unknown error"}`} style={{ color: "#fca5a5" }} />
+          <EmptyState text={`加载分析任务失败：${runsError instanceof Error ? runsError.message : "未知错误"}`} style={{ color: "#fca5a5" }} />
         ) : !runs || runs.length === 0 ? (
-          <EmptyState text="No analysis runs yet." />
+          <EmptyState text="尚无分析任务。" />
         ) : (
           <table style={tableStyle}>
             <thead>
               <tr>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Summary</th>
+                <th style={thStyle}>类型</th>
+                <th style={thStyle}>状态</th>
+                <th style={thStyle}>摘要</th>
               </tr>
             </thead>
             <tbody>
@@ -260,16 +260,16 @@ export function AnalysisPanel({ systemId, snapshot, blockers }: GateContentPanel
 
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" as const }}>
         <ActionButton
-          label={createRun.isPending ? "Creating Run..." : "Create Analysis Run"}
+          label={createRun.isPending ? "创建中..." : "创建分析任务"}
           onClick={() => createRun.mutate()}
           disabled={createRun.isPending}
           isPending={createRun.isPending}
         />
       </div>
-      {createRunErrorMessage ? <div style={errorTextStyle}>Analysis run creation failed: {createRunErrorMessage}</div> : null}
+      {createRunErrorMessage ? <div style={errorTextStyle}>分析任务创建失败：{createRunErrorMessage}</div> : null}
 
       {blockers.length > 0 ? (
-        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>Blockers ({blockers.length})</span>}>
+        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>阻塞项 ({blockers.length})</span>}>
           <div style={blockerListStyle}>
             {blockers.map((b, i) => (
               <div key={`${b.code}-${i}`} style={blockerItemStyle}>

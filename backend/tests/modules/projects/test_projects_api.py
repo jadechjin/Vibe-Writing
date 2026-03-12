@@ -190,3 +190,94 @@ def _create_project(
         )
     )
     return project
+
+
+# ---- Completion metrics tests ----
+
+
+def test_project_detail_zero_completions(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session, name="Zero", owner_id="owner-z")
+        session.add(
+            ExperimentalSystem(
+                project_id=project.id, system_no=1, title="S1", status="Draft"
+            )
+        )
+        session.add(
+            ExperimentalSystem(
+                project_id=project.id, system_no=2, title="S2", status="Section_Drafting"
+            )
+        )
+        session.commit()
+        pid = project.id
+
+    resp = client.get(f"/api/projects/{pid}")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["completedSystemCount"] == 0
+    assert data["introductionUnlocked"] is False
+
+
+def test_project_detail_partial_completions(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session, name="Partial", owner_id="owner-p")
+        session.add(
+            ExperimentalSystem(
+                project_id=project.id, system_no=1, title="S1", status="Chapter_Approved"
+            )
+        )
+        session.add(
+            ExperimentalSystem(
+                project_id=project.id, system_no=2, title="S2", status="Draft"
+            )
+        )
+        session.commit()
+        pid = project.id
+
+    resp = client.get(f"/api/projects/{pid}")
+    data = resp.json()["data"]
+    assert data["completedSystemCount"] == 1
+    assert data["introductionUnlocked"] is False
+
+
+def test_project_detail_threshold_exact_unlocks(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session, name="Exact", owner_id="owner-e")
+        for i in range(1, 4):
+            session.add(
+                ExperimentalSystem(
+                    project_id=project.id,
+                    system_no=i,
+                    title=f"S{i}",
+                    status="Chapter_Approved",
+                )
+            )
+        session.commit()
+        pid = project.id
+
+    resp = client.get(f"/api/projects/{pid}")
+    data = resp.json()["data"]
+    assert data["completedSystemCount"] == 3
+    assert data["introductionUnlocked"] is True
+
+
+def test_project_detail_above_threshold(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session, name="Above", owner_id="owner-a")
+        for i in range(1, 6):
+            status = "Chapter_Approved" if i <= 4 else "Draft"
+            session.add(
+                ExperimentalSystem(
+                    project_id=project.id,
+                    system_no=i,
+                    title=f"S{i}",
+                    status=status,
+                )
+            )
+        session.commit()
+        pid = project.id
+
+    resp = client.get(f"/api/projects/{pid}")
+    data = resp.json()["data"]
+    assert data["completedSystemCount"] == 4
+    assert data["introductionUnlocked"] is True

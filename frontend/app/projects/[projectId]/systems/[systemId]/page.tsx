@@ -107,10 +107,10 @@ function AdvanceOutcome({ data }: { data: AdvanceResponse }) {
     return (
       <div style={outcomeBlockedStyle}>
         <div style={{ fontSize: "14px", fontWeight: 600, color: "#fca5a5" }}>
-          Advance Blocked at {data.gate}
+          推进被阻止于 {data.gate}
         </div>
         <div style={{ fontSize: "13px", color: "#fecaca", marginTop: "4px" }}>
-          Current state: {data.currentState}
+          当前状态：{data.currentState}
         </div>
         {data.blockers.length > 0 ? (
           <div>
@@ -120,7 +120,7 @@ function AdvanceOutcome({ data }: { data: AdvanceResponse }) {
                 <div style={blockerMsgStyle}>{blocker.message}</div>
                 {blocker.requiredChecks.length > 0 ? (
                   <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "4px" }}>
-                    Required: {blocker.requiredChecks.join(", ")}
+                    需要：{blocker.requiredChecks.join(", ")}
                   </div>
                 ) : null}
               </div>
@@ -134,14 +134,14 @@ function AdvanceOutcome({ data }: { data: AdvanceResponse }) {
   return (
     <div style={outcomeAcceptedStyle}>
       <div style={{ fontSize: "14px", fontWeight: 600, color: "#4ade80" }}>
-        Advance Accepted at {data.gate}
+        推进已通过 {data.gate}
       </div>
       <div style={{ fontSize: "13px", color: "#bbf7d0", marginTop: "4px" }}>
         {data.fromState} &rarr; {data.toState}
       </div>
       {data.handle ? (
         <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "6px" }}>
-          Job: {data.handle.jobId} ({data.handle.status})
+          任务：{data.handle.jobId}（{data.handle.status}）
         </div>
       ) : null}
     </div>
@@ -226,11 +226,11 @@ function SystemWorkspacePage({
 
 
   if (statusLoading) {
-    return <div style={emptyStyle}>Loading system workflow...</div>
+    return <div style={emptyStyle}>加载工作流中...</div>
   }
 
   if (statusError) {
-    return <div style={emptyStyle}>Failed to load workflow: {statusError.message}</div>
+    return <div style={emptyStyle}>加载工作流失败：{statusError.message}</div>
   }
 
   const latestBlockers = snapshot?.latestBlockers ?? []
@@ -277,9 +277,9 @@ function SystemWorkspacePage({
     >
       <div style={headerStyle}>
         <div>
-          <div style={titleStyle}>System Workspace</div>
+          <div style={titleStyle}>系统工作区</div>
           <div style={subtitleStyle}>
-            Project: {projectId} | System: {systemId}
+            项目：{projectId} | 体系：{systemId}
           </div>
         </div>
         <button
@@ -288,7 +288,7 @@ function SystemWorkspacePage({
           onClick={handleAdvance}
           disabled={advancePending}
         >
-          {advancePending ? "Advancing..." : "Advance Gate"}
+          {advancePending ? "推进中..." : "推进 Gate"}
         </button>
       </div>
 
@@ -296,7 +296,7 @@ function SystemWorkspacePage({
 
       {advanceError ? (
         <div style={{ color: "#f87171", fontSize: "13px", marginBottom: "4px" }}>
-          Advance failed: {advanceError.message}
+          推进失败：{advanceError.message}
         </div>
       ) : null}
     </MainShell>

@@ -165,7 +165,7 @@ export function EvidenceHub({ snapshot, latestBlockers, gateKey }: EvidenceHubPr
 
       {latestBlockers.length > 0 ? (
         <div style={blockerSectionStyle}>
-          <div style={blockerTitleStyle}>Current Blockers</div>
+          <div style={blockerTitleStyle}>当前阻塞项</div>
           {latestBlockers.map((blocker, idx) => (
             <div key={`${blocker.code}-${idx}`} style={blockerItemStyle}>
               <span style={blockerCodeStyle}>[{blocker.code}]</span>

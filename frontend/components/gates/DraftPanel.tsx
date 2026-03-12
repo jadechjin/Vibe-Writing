@@ -59,19 +59,19 @@ const SECTION_GROUP_META: Record<
   }
 > = {
   approved: {
-    title: "Approved Sections",
-    description: "Latest approved drafts. These sections are ready for chapter-level acceptance.",
-    emptyText: "No sections have an approved latest draft yet.",
+    title: "已通过章节",
+    description: "最新已通过草稿，这些章节已可进入章节级验收。",
+    emptyText: "暂无已通过的最新草稿。",
   },
   needs_review: {
-    title: "Needs Review",
-    description: "Latest drafts exist but still need review comments, iteration, or approval.",
-    emptyText: "No sections are currently waiting for review.",
+    title: "待审阅",
+    description: "最新草稿已存在，但仍需审阅意见、迭代或批准。",
+    emptyText: "当前无章节等待审阅。",
   },
   ready_to_generate: {
-    title: "Ready to Generate",
-    description: "Sections without a latest draft. Generate from the confirmed outline when ready.",
-    emptyText: "Every system section already has a latest draft version.",
+    title: "待生成",
+    description: "尚无最新草稿的章节，准备就绪后可从已确认提纲生成。",
+    emptyText: "所有系统章节均已有最新草稿版本。",
   },
 }
 
@@ -413,13 +413,13 @@ function isDraftPreviewable(draft: SectionDraftDetail | null): boolean {
 function getDecisionLabel(decision: string | null): string {
   switch (decision) {
     case "approve":
-      return "Approve"
+      return "通过"
     case "freeze":
-      return "Freeze"
+      return "冻结"
     case "request_changes":
-      return "Request Changes"
+      return "请求修改"
     default:
-      return "Comment"
+      return "评论"
   }
 }
 
@@ -428,7 +428,7 @@ function getFeedbackKey(kind: "generate" | "approve" | "review", id: string): st
 }
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown error"
+  return error instanceof Error ? error.message : "未知错误"
 }
 
 export function DraftPanel({
@@ -664,7 +664,7 @@ export function DraftPanel({
           rememberSuccess(
             getFeedbackKey("generate", sectionKey),
             sectionKey,
-            "Draft generation has been queued. This local success note clears when refreshed draft truth arrives.",
+            "草稿生成已排队。刷新后此提示将自动清除。",
           )
         },
         onError: (error) => {
@@ -695,7 +695,7 @@ export function DraftPanel({
         rememberSuccess(
           getFeedbackKey("approve", draft.id),
           draft.sectionKey,
-          "Draft approval submitted. This local success note clears once the refreshed latest draft state becomes authoritative.",
+          "草稿批准已提交。刷新后此提示将自动清除。",
         )
       },
       onError: (error) => {
@@ -742,7 +742,7 @@ export function DraftPanel({
           rememberSuccess(
             getFeedbackKey("review", draft.id),
             draft.sectionKey,
-            "Review comment submitted. This success note clears after refreshed comment truth replaces the local state.",
+            "审阅意见已提交。刷新后此提示将自动清除。",
           )
         },
         onError: (error) => {
@@ -766,14 +766,14 @@ export function DraftPanel({
       return {
         disabled: true,
         message:
-          "A section action is already in progress. Wait for the latest task update before triggering another one.",
+          "当前已有章节操作进行中，请等待最新任务更新后再触发。",
       }
     }
 
     if (!hasConfirmedOutline) {
       return {
         disabled: true,
-        message: "Generate draft is unavailable until the latest outline is confirmed in G4.",
+        message: "在 G4 确认最新提纲前，无法生成草稿。",
       }
     }
 
@@ -781,20 +781,20 @@ export function DraftPanel({
       return {
         disabled: true,
         message:
-          "Latest draft already exists for this section. Review or approve the current version before creating another one.",
+          "该章节已有最新草稿，请先审阅或批准当前版本。",
       }
     }
 
     if (blockers.length > 0) {
       return {
         disabled: true,
-        message: `Workflow blocker noted: ${blockers[0].message}`,
+        message: `工作流阻塞：${blockers[0].message}`,
       }
     }
 
     return {
       disabled: false,
-      message: "Ready to generate from the latest confirmed outline.",
+      message: "已就绪，可从最新已确认提纲生成。",
     }
   }
 
@@ -805,32 +805,32 @@ export function DraftPanel({
     return (
       <div style={previewShellStyle}>
         <div style={previewHeaderStyle}>
-          <div style={subSectionTitleStyle}>Latest Draft Preview</div>
+          <div style={subSectionTitleStyle}>最新草稿预览</div>
           {previewable ? (
             <button
               type="button"
               style={previewToggleStyle}
               onClick={() => togglePreview(sectionKey)}
             >
-              {isExpanded ? "Collapse Preview" : "Expand Preview"}
+              {isExpanded ? "收起预览" : "展开预览"}
             </button>
           ) : (
-            <span style={previewUnavailableStyle}>Unavailable</span>
+            <span style={previewUnavailableStyle}>不可用</span>
           )}
         </div>
         {!draft ? (
           <div style={helperTextStyle}>
-            No preview is available yet because this section does not have a latest draft.
+            该章节尚无最新草稿，暂无预览。
           </div>
         ) : !previewable ? (
           <div style={helperTextStyle}>
-            The latest draft exists, but preview content is unavailable until non-empty content is generated.
+            最新草稿已存在，但内容为空，暂无法预览。
           </div>
         ) : isExpanded ? (
           <div style={contentPreviewStyle}>{draft.contentMd}</div>
         ) : (
           <div style={helperTextStyle}>
-            Preview is collapsed by default. Expand it only when you need to inspect the current latest draft content.
+            预览默认收起，需要查看最新草稿内容时展开。
           </div>
         )}
       </div>
@@ -854,7 +854,7 @@ export function DraftPanel({
           </div>
         ))}
         {draft.reviewComments.length === 0 ? (
-          <div style={emptyStateStyle}>No review comments yet.</div>
+          <div style={emptyStateStyle}>暂无审阅意见。</div>
         ) : null}
       </div>
     )
@@ -888,7 +888,7 @@ export function DraftPanel({
         <div style={itemHeaderStyle}>
           <div>
             <div style={itemTitleStyle}>{section.title}</div>
-            <div style={itemMetaStyle}>Section key: {section.sectionKey}</div>
+            <div style={itemMetaStyle}>章节键值：{section.sectionKey}</div>
           </div>
           {draft ? <span style={badgeStyle(draft.status)}>{draft.status}</span> : null}
         </div>
@@ -896,17 +896,17 @@ export function DraftPanel({
         {draft ? (
           <>
             <div style={itemMetaStyle}>
-              Claims used: {draft.generatedFromClaimsJson.length} · Version {draft.version}
+              使用 Claims：{draft.generatedFromClaimsJson.length} · 版本 {draft.version}
             </div>
-            <div style={itemMetaStyle}>Review comments: {draft.reviewComments.length}</div>
+            <div style={itemMetaStyle}>审阅意见数：{draft.reviewComments.length}</div>
             {draft.approvedAt ? (
               <div style={itemMetaStyle}>
-                Approved: {new Date(draft.approvedAt).toLocaleString()}
+                批准时间：{new Date(draft.approvedAt).toLocaleString()}
               </div>
             ) : null}
           </>
         ) : (
-          <div style={itemMetaStyle}>No latest draft recorded for this section yet.</div>
+          <div style={itemMetaStyle}>该章节尚无最新草稿记录。</div>
         )}
 
         {renderPreview(section.sectionKey, draft)}
@@ -918,7 +918,7 @@ export function DraftPanel({
             onClick={() => handleGenerate(section.sectionKey)}
             disabled={actionHelper.disabled}
           >
-            {isGeneratingSection ? "Generating..." : "Generate Draft"}
+            {isGeneratingSection ? "生成中..." : "生成草稿"}
           </button>
 
           {draft && draft.status !== "approved" ? (
@@ -928,7 +928,7 @@ export function DraftPanel({
               onClick={() => handleApprove(draft)}
               disabled={hasPendingSectionAction}
             >
-              {isApprovingDraft ? "Approving..." : "Approve Draft"}
+              {isApprovingDraft ? "批准中..." : "批准草稿"}
             </button>
           ) : null}
 
@@ -943,7 +943,7 @@ export function DraftPanel({
               }}
               disabled={hasPendingSectionAction}
             >
-              {reviewingDraftId === draft.id ? "Hide Review Form" : "Add Review Comment"}
+              {reviewingDraftId === draft.id ? "隐藏审阅表单" : "添加审阅意见"}
             </button>
           ) : null}
         </div>
@@ -961,7 +961,7 @@ export function DraftPanel({
         {draft && reviewingDraftId === draft.id ? (
           <div style={fieldGroupStyle}>
             <label style={fieldLabelStyle} htmlFor={`reviewer-${draft.id}`}>
-              Commenter ID
+              评审人 ID
             </label>
             <input
               id={`reviewer-${draft.id}`}
@@ -974,7 +974,7 @@ export function DraftPanel({
               }
             />
             <label style={fieldLabelStyle} htmlFor={`decision-${draft.id}`}>
-              Decision
+              决定
             </label>
             <select
               id={`decision-${draft.id}`}
@@ -991,7 +991,7 @@ export function DraftPanel({
               <option value="freeze">freeze</option>
             </select>
             <label style={fieldLabelStyle} htmlFor={`review-text-${draft.id}`}>
-              Comment
+              意见
             </label>
             <textarea
               id={`review-text-${draft.id}`}
@@ -1002,7 +1002,7 @@ export function DraftPanel({
                   commentText: event.target.value,
                 })
               }
-              placeholder="Describe what should change or why this section is ready."
+              placeholder="描述需要修改的内容或该章节已就绪的原因。"
             />
             <button
               type="button"
@@ -1010,7 +1010,7 @@ export function DraftPanel({
               onClick={() => handleSubmitReview(draft)}
               disabled={hasPendingSectionAction}
             >
-              {isSubmittingReview ? "Submitting..." : "Submit Review Comment"}
+              {isSubmittingReview ? "提交中..." : "提交审阅意见"}
             </button>
           </div>
         ) : null}

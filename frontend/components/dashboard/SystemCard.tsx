@@ -38,12 +38,12 @@ function resolveStatusColor(status: string) {
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const minutes = Math.floor(diff / 60_000)
-  if (minutes < 1) return "just now"
-  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 1) return "刚刚"
+  if (minutes < 60) return `${minutes}分钟前`
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return `${hours}小时前`
   const days = Math.floor(hours / 24)
-  return `${days}d ago`
+  return `${days}天前`
 }
 
 const cardStyle: CSSProperties = {
@@ -249,10 +249,10 @@ export function SystemCard({
 
       {confirming ? (
         <div style={confirmBarStyle} onClick={(e) => e.stopPropagation()}>
-          <span>Delete this system?</span>
+          <span>确定删除该体系？</span>
           <div style={{ display: "flex", gap: "6px" }}>
             <button type="button" style={cancelConfirmBtnStyle} onClick={handleCancelDelete}>
-              Cancel
+              取消
             </button>
             <button
               type="button"
@@ -260,7 +260,7 @@ export function SystemCard({
               onClick={handleConfirmDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? "删除中..." : "删除"}
             </button>
           </div>
         </div>
@@ -281,7 +281,7 @@ export function SystemCard({
       <div style={footerStyle}>
         <span>
           {completed}/{total} gates
-          {pct === 100 ? " \u2014 Complete" : ""}
+          {pct === 100 ? " \u2014 已完成" : ""}
         </span>
         <span>{formatRelativeTime(system.updatedAt)}</span>
       </div>

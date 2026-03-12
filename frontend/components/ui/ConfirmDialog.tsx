@@ -80,7 +80,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   isPending = false,
-  confirmLabel = "Confirm",
+  confirmLabel = "确认",
 }: ConfirmDialogProps) {
   if (!isOpen) return null
 
@@ -91,7 +91,7 @@ export function ConfirmDialog({
         <div style={messageStyle}>{message}</div>
         <div style={actionsStyle}>
           <button style={cancelBtnStyle} onClick={onCancel} disabled={isPending}>
-            Cancel
+            取消
           </button>
           <button
             style={{ ...confirmBtnStyle, opacity: isPending ? 0.5 : 1, cursor: isPending ? "not-allowed" : "pointer" }}

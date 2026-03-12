@@ -30,9 +30,9 @@ const titleStyle: CSSProperties = {
 }
 
 const CONNECTION_INDICATOR: Record<ConnectionState, { label: string; color: string }> = {
-  connecting: { label: "Connecting...", color: "#fbbf24" },
-  open: { label: "Connected", color: "#4ade80" },
-  closed: { label: "Disconnected", color: "#f87171" },
+  connecting: { label: "连接中...", color: "#fbbf24" },
+  open: { label: "已连接", color: "#4ade80" },
+  closed: { label: "已断开", color: "#f87171" },
 }
 
 const dotStyle: CSSProperties = {
@@ -69,14 +69,14 @@ export function StatusTray({ projectId, systemId, onInvalidate, onNavigate }: St
   return (
     <section>
       <div style={headerStyle}>
-        <span style={titleStyle}>Task Status</span>
+        <span style={titleStyle}>任务状态</span>
         <span style={connectionStyle}>
           <span style={{ ...dotStyle, background: indicator.color }} />
           {indicator.label}
         </span>
       </div>
       {events.length === 0 ? (
-        <div style={emptyStyle}>No active tasks</div>
+        <div style={emptyStyle}>暂无活跃任务</div>
       ) : (
         <div style={listStyle}>
           {events.map((event) => (

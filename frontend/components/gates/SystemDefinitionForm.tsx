@@ -36,37 +36,37 @@ type FieldConfig = {
 const FIELD_CONFIGS: FieldConfig[] = [
   {
     key: "researchGoal",
-    label: "Research Goal",
-    placeholder: "Describe the research goal of this system...",
+    label: "研究目标",
+    placeholder: "描述该体系的研究目标...",
     rows: 3,
   },
   {
     key: "samplesSubjects",
-    label: "Samples / Subjects",
-    placeholder: "Describe samples or subjects used...",
+    label: "样本 / 受试对象",
+    placeholder: "描述使用的样本或受试对象...",
     rows: 3,
   },
   {
     key: "variablesControls",
-    label: "Variables & Controls",
-    placeholder: "Describe experimental variables and controls...",
+    label: "变量与对照",
+    placeholder: "描述实验变量与对照设置...",
     rows: 3,
   },
   {
     key: "outputMetrics",
-    label: "Output Metrics",
-    placeholder: "Describe expected output metrics...",
+    label: "产出指标",
+    placeholder: "描述预期产出指标...",
     rows: 3,
   },
   {
     key: "methodsSummary",
-    label: "Methods Summary",
-    placeholder: "Summarize the experimental methods...",
+    label: "方法概述",
+    placeholder: "概述实验方法...",
     rows: 4,
   },
   {
     key: "systemCardJson",
-    label: "System Card (JSON)",
+    label: "体系卡片 (JSON)",
     placeholder: '{\n  "key": "value"\n}',
     rows: 6,
   },
@@ -253,7 +253,7 @@ export function SystemDefinitionForm({
             setJsonError(null)
           } catch (err) {
             setJsonError(
-              err instanceof Error ? err.message : "Invalid JSON",
+              err instanceof Error ? err.message : "无效 JSON",
             )
           }
         }
@@ -278,7 +278,7 @@ export function SystemDefinitionForm({
 
   return (
     <div style={containerStyle}>
-      <div style={headerStyle}>System Definition</div>
+      <div style={headerStyle}>体系定义</div>
 
       {FIELD_CONFIGS.map((field) => {
         const missing = isMissing(field.key)
@@ -305,11 +305,11 @@ export function SystemDefinitionForm({
             />
 
             {missing ? (
-              <div style={missingHintStyle}>This field is required to pass the gate.</div>
+              <div style={missingHintStyle}>此字段为门禁通过的必填项。</div>
             ) : null}
 
             {isJson && jsonError ? (
-              <div style={errorTextStyle}>JSON Error: {jsonError}</div>
+              <div style={errorTextStyle}>JSON 错误：{jsonError}</div>
             ) : null}
           </div>
         )
@@ -323,7 +323,7 @@ export function SystemDefinitionForm({
             disabled={!canSubmit}
             style={canSubmit ? buttonBaseStyle : buttonDisabledStyle}
           >
-            {isUpdating ? "Saving..." : "Save Definition"}
+            {isUpdating ? "保存中..." : "保存定义"}
           </button>
         </div>
       ) : null}

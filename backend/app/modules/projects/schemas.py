@@ -63,3 +63,5 @@ class ProjectListItem(CamelModel):
 class ProjectDetail(ProjectListItem):
     thesis_schema_json: dict[str, Any] = Field(default_factory=dict)
     systems: list[ProjectSystemSummary] = Field(default_factory=list)
+    completed_system_count: int = 0
+    introduction_unlocked: bool = False

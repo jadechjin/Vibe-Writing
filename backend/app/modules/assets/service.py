@@ -451,7 +451,7 @@ async def complete_manifest_generation(
             workflow_id=workflow_id,
             workflow_snapshot=workflow_snapshot,
             message="Manifest generation failed unexpectedly",
-            payload={"code": ErrorCode.WORKFLOW_ERROR.value, "details": {"error": str(exc)}},
+            payload={"code": ErrorCode.WORKFLOW_ERROR.value, "details": {}},
             broadcaster=broadcaster,
         )
 
@@ -466,6 +466,7 @@ async def _record_manifest_generation_failure(
     payload: dict[str, Any],
     broadcaster: TaskBroadcaster | None,
 ) -> None:
+    await _maybe_await(session.rollback())
     await append_system_workflow_event(
         task_service,
         WorkflowEventCommand(

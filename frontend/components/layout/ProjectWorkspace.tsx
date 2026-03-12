@@ -84,7 +84,7 @@ const defaultEvidencePanel = (
       }}
     >
       <strong style={{ display: "block", marginBottom: "8px", color: "#e2e8f0" }}>
-        Evidence Matrix Slot
+        证据矩阵插槽
       </strong>
       <span style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>
         用于放置 claim、figure、analysis 与 asset 关联面板。
@@ -117,7 +117,7 @@ const defaultWorkbenchPanel = (
       }}
     >
       <strong style={{ display: "block", marginBottom: "8px", color: "#f8fafc" }}>
-        Gate Workbench Slot
+        Gate 工作台插槽
       </strong>
       <span style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.6 }}>
         用于承载 Draft、Outline、Review 或 Gate 审批面板。
@@ -159,7 +159,7 @@ export function ProjectWorkspace({
     <div style={workspaceStyle}>
       <div style={splitPaneStyle}>
         <WorkspacePanel
-          eyebrow="Evidence Hub"
+          eyebrow="证据中枢"
           title="证据中枢"
           subtitle="固定双栏中的左侧槽位，面向证据矩阵、图表计划与资产上下文。"
         >
@@ -167,7 +167,7 @@ export function ProjectWorkspace({
         </WorkspacePanel>
 
         <WorkspacePanel
-          eyebrow="Workbench"
+          eyebrow="工作台"
           title="Gate 工作区"
           subtitle="右侧槽位承载 gate 对应的业务面板，布局层仅提供稳定容器。"
         >

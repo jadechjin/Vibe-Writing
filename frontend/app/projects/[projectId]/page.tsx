@@ -159,7 +159,7 @@ export default function ProjectPage() {
         onError: (err: Error) => {
           const status = err instanceof ApiError ? err.status : 0
           const msg = status === 409
-            ? "This system has associated data and cannot be deleted. Remove related assets and workflow data first."
+            ? "该体系存在关联数据，无法删除。请先移除相关资产和工作流数据。"
             : err.message
           setDeleteErrorMsg(msg)
           setErrorSystemId(systemId)
@@ -190,11 +190,11 @@ export default function ProjectPage() {
   }
 
   if (isLoading) {
-    return <div style={emptyStyle}>Loading project...</div>
+    return <div style={emptyStyle}>加载项目中...</div>
   }
 
   if (error || !project) {
-    return <div style={emptyStyle}>Failed to load project: {error?.message ?? "Not found"}</div>
+    return <div style={emptyStyle}>加载项目失败：{error?.message ?? "未找到"}</div>
   }
 
   return (
@@ -203,11 +203,11 @@ export default function ProjectPage() {
         <div>
           <div style={titleStyle}>{project.name}</div>
           <div style={metaStyle}>
-            Owner: {project.ownerId} | Status: {project.status} | {project.systems.length} system{project.systems.length !== 1 ? "s" : ""}
+            负责人：{project.ownerId} | 状态：{project.status} | {project.systems.length} 个实验体系
           </div>
         </div>
         <button type="button" style={createBtnStyle} onClick={() => setShowForm(true)}>
-          + New System
+          + 新建实验体系
         </button>
       </div>
 
@@ -218,10 +218,10 @@ export default function ProjectPage() {
       />
 
       <div>
-        <div style={sectionTitleStyle}>Experimental Systems</div>
+        <div style={sectionTitleStyle}>实验体系</div>
         {project.systems.length === 0 ? (
           <div style={emptyStyle}>
-            No experimental systems yet. Create one to start the workflow.
+            暂无实验体系，创建一个开始工作流。
           </div>
         ) : (
           <div style={listStyle}>
@@ -243,17 +243,17 @@ export default function ProjectPage() {
         <div style={formOverlayStyle} onClick={() => setShowForm(false)}>
           <div style={formCardStyle} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: "18px", fontWeight: 700, color: "#f8fafc" }}>
-              Create Experimental System
+              创建实验体系
             </div>
             <input
               style={inputStyle}
-              placeholder="System title"
+              placeholder="体系标题"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
             <textarea
               style={textareaStyle}
-              placeholder="Research goal (optional)"
+              placeholder="研究目标（选填）"
               value={researchGoal}
               onChange={(e) => setResearchGoal(e.target.value)}
             />
@@ -264,7 +264,7 @@ export default function ProjectPage() {
             ) : null}
             <div style={formActionsStyle}>
               <button type="button" style={cancelBtnStyle} onClick={() => setShowForm(false)}>
-                Cancel
+                取消
               </button>
               <button
                 type="button"
@@ -272,7 +272,7 @@ export default function ProjectPage() {
                 onClick={handleCreateSystem}
                 disabled={createSystem.isPending}
               >
-                {createSystem.isPending ? "Creating..." : "Create"}
+                {createSystem.isPending ? "创建中..." : "创建"}
               </button>
             </div>
           </div>

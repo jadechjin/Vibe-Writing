@@ -15,12 +15,12 @@ type TaskItemProps = Readonly<{
 }>
 
 const STATUS_META: Record<TaskStatus, { label: string; color: string }> = {
-  queued: { label: "Queued", color: "#94a3b8" },
-  running: { label: "Running", color: "#60a5fa" },
-  waiting_user: { label: "Waiting", color: "#fbbf24" },
-  succeeded: { label: "Done", color: "#4ade80" },
-  failed: { label: "Failed", color: "#f87171" },
-  cancelled: { label: "Cancelled", color: "#a1a1aa" },
+  queued: { label: "排队中", color: "#94a3b8" },
+  running: { label: "运行中", color: "#60a5fa" },
+  waiting_user: { label: "等待中", color: "#fbbf24" },
+  succeeded: { label: "已完成", color: "#4ade80" },
+  failed: { label: "失败", color: "#f87171" },
+  cancelled: { label: "已取消", color: "#a1a1aa" },
 }
 
 const itemStyle: CSSProperties = {
@@ -111,7 +111,7 @@ function ProgressBar({ value }: Readonly<{ value: number }>) {
 
 function formatTaskTypeLabel(taskType: string | null): string {
   if (!taskType) {
-    return "Task"
+    return "任务"
   }
 
   return taskType
@@ -166,8 +166,8 @@ export function TaskItem({ event, onNavigate }: TaskItemProps) {
         type="button"
         style={interactiveItemStyle}
         onClick={() => onNavigate?.(mappedGate)}
-        title={`Open ${mappedGate}`}
-        aria-label={`Open ${mappedGate} workbench for task ${event.taskId}`}
+        title={`打开 ${mappedGate}`}
+        aria-label={`打开 ${mappedGate} 工作台，任务 ${event.taskId}`}
       >
         {content}
       </button>

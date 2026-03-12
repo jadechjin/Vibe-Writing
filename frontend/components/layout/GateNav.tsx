@@ -25,35 +25,35 @@ type GateStyleToken = Readonly<{
 
 const gateStateTokens: Record<GateVisualStatus, GateStyleToken> = {
   neutral: {
-    badge: "Awaiting Data",
+    badge: "等待数据",
     borderColor: "rgba(148, 163, 184, 0.24)",
     background: "rgba(15, 23, 42, 0.62)",
     textColor: "#cbd5e1",
     accent: "#64748b",
   },
   locked: {
-    badge: "Locked",
+    badge: "已锁定",
     borderColor: "rgba(120, 139, 165, 0.35)",
     background: "rgba(15, 23, 42, 0.78)",
     textColor: "#8da2bf",
     accent: "#475569",
   },
   active: {
-    badge: "Active",
+    badge: "进行中",
     borderColor: "rgba(59, 130, 246, 0.72)",
     background: "rgba(30, 64, 175, 0.18)",
     textColor: "#dbeafe",
     accent: "#3b82f6",
   },
   passed: {
-    badge: "Passed",
+    badge: "已通过",
     borderColor: "rgba(34, 197, 94, 0.6)",
     background: "rgba(20, 83, 45, 0.3)",
     textColor: "#dcfce7",
     accent: "#16a34a",
   },
   pending: {
-    badge: "Pending",
+    badge: "待处理",
     borderColor: "rgba(249, 115, 22, 0.58)",
     background: "rgba(154, 52, 18, 0.18)",
     textColor: "#ffedd5",
@@ -181,7 +181,7 @@ export const DEFAULT_GATE_PLACEHOLDERS: readonly GateNavItem[] = [
   {
     key: "G1",
     label: "G1",
-    title: "Figure Plan",
+    title: "图表规划",
     summary: "等待 gate 状态数据接入。",
     state: "neutral",
   },
@@ -220,7 +220,7 @@ export function GateNav({ gates }: { gates: readonly GateNavItem[] }) {
     <header style={headerStyle}>
       <div style={headerInnerStyle}>
         <div style={titleBlockStyle}>
-          <span style={eyebrowStyle}>Gate Workflow</span>
+          <span style={eyebrowStyle}>门禁工作流</span>
           <strong style={titleStyle}>论文工作台</strong>
           <span style={subtitleStyle}>G0–G5 门禁驱动的实验体系推进</span>
         </div>

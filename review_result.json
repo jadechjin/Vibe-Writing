@@ -1,1 +1,76 @@
-{"findings":[]}
+{
+  "style_analysis": {
+    "duplicated_styles": [
+      "panelStyle",
+      "sectionCardStyle",
+      "titleStyle",
+      "descStyle",
+      "actionBtnStyle",
+      "statusBadgeStyle",
+      "emptyStateStyle",
+      "errorTextStyle",
+      "helperTextStyle",
+      "fieldGroupStyle",
+      "inputStyle"
+    ],
+    "extraction_plan": "Create gate-theme.ts in frontend/styles/ to house shared CSSProperties. Use semantic naming: CONTAINER, CARD, TITLE_MAIN, TITLE_SUB, TEXT_DESC, TEXT_HELPER, BTN_PRIMARY, BTN_SECONDARY, BADGE_VARIANTS.",
+    "unique_styles": [
+      "summaryGridStyle (DraftPanel/EvidenceMatrix)",
+      "blockerItemStyle (all 5, but specific to blockers)",
+      "previewShellStyle (DraftPanel)",
+      "metadataFormStyle (ManifestPanel)"
+    ]
+  },
+  "component_api_design": {
+    "ActionButton": {
+      "props": ["label", "onClick", "variant='primary'|'secondary'|'danger'", "isLoading", "disabled", "style"]
+    },
+    "SectionCard": {
+      "props": ["title", "description?", "status?", "children", "style"]
+    },
+    "StatusBadge": {
+      "props": ["text", "variant='orange'|'green'|'red'|'gray'", "style"]
+    },
+    "DataTable": {
+      "props": ["data", "columns", "loading", "emptyText", "error"]
+    },
+    "EmptyState": {
+      "props": ["message", "style"]
+    },
+    "ConfirmDialog": {
+      "props": ["isOpen", "title", "message", "onConfirm", "onCancel", "confirmLabel", "cancelLabel"]
+    },
+    "Toast": {
+      "architecture": "Hook-based (useToast) with a shared ToastProvider at the system layout level. Handles success/error/info with automatic dismissal."
+    }
+  },
+  "progress_integration": {
+    "current_state": "GateTaskStatus already consumes activeTask.progress but UI is basic and lacks transitions.",
+    "enhancement": "Refine ProgressBar component with CSS transitions, show numerical percentage prominently, and ensure the task message updates reactively. Add 'indeterminate' animation when status is 'running' but progress is null.",
+    "websocket_flow": "Backend sends TaskEvent via WebSocket; WebSocketContext updates internal state; GateTaskStatus filters for current systemId/gateKey and renders the active task progress."
+  },
+  "batch_ux_design": {
+    "selection_model": "Multi-select checkboxes per row/item. State managed locally in the panel (selectedIds: string[]).",
+    "ui_elements": "Select All checkbox in headers/group-titles; Floating BatchActions bar or summary row that appears when count > 0; Loading state for the entire batch operation.",
+    "operations": {
+      "EvidenceMatrixPanel": "POST /systems/{id}/claims/batch-approve { claimIds: string[] }",
+      "ManifestPanel": "POST /systems/{id}/assets/batch-confirm-qc { assetIds: string[] }"
+    }
+  },
+  "toast_architecture": {
+    "type": "Context + Hook based.",
+    "provider_location": "frontend/app/projects/[projectId]/systems/[systemId]/layout.tsx (wraps GatePanel or entire page).",
+    "hook_api": "useToast() -> { success(msg), error(msg), info(msg), toasts: Toast[] }."
+  },
+  "migration_strategy": {
+    "incremental_steps": [
+      "1. Extract gate-theme.ts and implement frontend/components/ui/ primitives.",
+      "2. Create useToast hook and ToastProvider; integrate into system-level layout.",
+      "3. Upgrade GateTaskStatus to consume progress with better styling.",
+      "4. Migrate FigurePlanPanel as a reference/smoke test for the new system.",
+      "5. Migrate remaining panels (Analysis, Draft, Manifest, EvidenceMatrix) sequentially.",
+      "6. Add batch selection and batch endpoints to Manifest and EvidenceMatrix panels last.",
+      "7. Add ConfirmDialogs to destructive/finalizing actions (e.g., Confirm Outline)."
+    ]
+  }
+}

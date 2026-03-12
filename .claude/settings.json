@@ -67,5 +67,8 @@
       }
     ]
   },
-  "enabledPlugins": {}
+  "enabledPlugins": {},
+  "permissions": {
+    "deny": []
+  }
 }

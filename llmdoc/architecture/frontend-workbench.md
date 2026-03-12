@@ -8,6 +8,7 @@
 
 | 路由 | 页面 | 壳层 | 说明 |
 |------|------|------|------|
+| `/` | 根页面 | — | Server Component，`redirect("/projects")` |
 | `/projects` | 项目列表 | 独立页（无 MainShell） | 自带背景与容器样式 |
 | `/projects/[projectId]` | 项目详情 | 独立页（无 MainShell） | 展示体系列表、创建体系 |
 | `/projects/[projectId]/systems/[systemId]` | 系统工作台 | MainShell 包裹 | 门禁导航 + 双栏工作区 + 状态托盘 |

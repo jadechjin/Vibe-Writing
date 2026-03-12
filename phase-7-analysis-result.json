@@ -1,0 +1,60 @@
+{
+  "style_analysis": {
+    "duplicated_constants": [
+      "panelStyle.gap: 14px",
+      "sectionCardStyle.padding: 16px, borderRadius: 14px, border: 1px solid rgba(148, 163, 184, 0.15), background: rgba(30, 41, 59, 0.38)",
+      "titleStyle.fontSize: 15px, fontWeight: 700, color: #f8fafc, marginBottom: 8px",
+      "descStyle.fontSize: 13px, lineHeight: 1.6, color: #94a3b8",
+      "actionBtnStyle.padding: 8px 18px, borderRadius: 10px, border: 1px solid rgba(249, 115, 22, 0.5), background: rgba(154, 52, 18, 0.15), color: #fb923c",
+      "statusBadgeStyle.background: rgba(249, 115, 22, 0.1), color: #fb923c, borderRadius: 4px, fontWeight: 600",
+      "emptyStateStyle.padding: 12px/20px, fontStyle: italic, color: #64748b",
+      "fieldGroupStyle.gap: 6px/10px",
+      "inputStyle.background: rgba(15, 23, 42, 0.6), border: 1px solid rgba(148, 163, 184, 0.18), borderRadius: 8px/10px"
+    ],
+    "shared_module_structure": "Extract constants to frontend/styles/gate-theme.ts (colors, spacings, base styles). UI Primitives in frontend/components/gates/ui/*.tsx. Style objects in gate-theme should be composable (e.g., baseButton + primaryVariant)."
+  },
+  "component_api_design": {
+    "ActionButton": {
+      "props": ["label: string", "onClick: () => void", "disabled?: boolean", "isPending?: boolean", "variant?: 'primary' | 'secondary' | 'danger'", "style?: CSSProperties", "size?: 'sm' | 'md'"],
+      "overrides": "Accepts 'style' for local positioning/margin tweaks; maintains core branding internally."
+    },
+    "SectionCard": {
+      "props": ["title: string | ReactNode", "description?: string", "children: ReactNode", "headerExtra?: ReactNode", "style?: CSSProperties"],
+      "overrides": "Wraps children in standardized padding and background."
+    },
+    "StatusBadge": {
+      "props": ["status: string", "variant?: 'pending' | 'success' | 'warning' | 'error' | 'auto'", "style?: CSSProperties"],
+      "overrides": "Auto-detects variant based on status string (e.g., 'approved' -> success)."
+    },
+    "DataTable": {
+      "props": ["headers: string[]", "data: T[]", "renderRow: (item: T, index: number) => ReactNode", "emptyText?: string", "isLoading?: boolean"],
+      "overrides": "Standardizes table/th/td styles across G2-G5."
+    },
+    "EmptyState": {
+      "props": ["text: string", "icon?: ReactNode", "style?: CSSProperties"],
+      "overrides": "Provides consistent centered placeholder text."
+    },
+    "ConfirmDialog": {
+      "props": ["isOpen: boolean", "title: string", "message: string", "onConfirm: () => void", "onCancel: () => void", "isPending?: boolean", "confirmLabel?: string"],
+      "overrides": "Portal-based modal for critical gate actions (e.g., Confirm Manifest)."
+    },
+    "Toast": {
+      "props": ["message: string", "type: 'success' | 'error' | 'info'", "duration?: number", "onClose: () => void"],
+      "overrides": "Ephemeral notification usually triggered via useToast() hook."
+    }
+  },
+  "progress_integration": "Enhance GateTaskStatus to use a thicker, animated progress bar. Consumers already provide systemId/gateKey; StatusBadge should pulse during 'running' state. Event flow: WebSocket -> WebSocketContext -> GateTaskStatus. Consumption via TaskEvent.progress (0-100). Add 'estimated time' label if available in payload.",
+  "batch_ux_design": "EvidenceMatrixPanel: Add checkboxes to the Claim Review Queue list items. ManifestPanel: Add checkboxes to the Assets Metadata & QC table. Implementation: Use a local 'selectedIds' Set state. Add a top-level 'Bulk Actions' bar that appears when selectedIds.size > 0, offering 'Approve Selected' or 'Confirm QC Selected' buttons.",
+  "toast_architecture": "React Context-based (ToastProvider) for global availability. Provide a useToast() hook that exposes showSuccess(msg) and showError(msg) methods. Simple queue management within the provider to handle multiple overlapping events.",
+  "migration_strategy": "1. Create gate-theme.ts and base primitives in ui/ folder. 2. Implement ToastProvider and wrap app in providers.tsx. 3. Update GateTaskStatus first for immediate visual impact. 4. Refactor FigurePlanPanel (simplest) to use primitives. 5. Progressively migrate G2-G5 panels, adding batch selection to Manifest and EvidenceMatrix panels during their respective migration turns.",
+  "constraints_discovered": [
+    "Panels currently use localized state for drafts (e.g., metadataDrafts in ManifestPanel) - primitives must allow controlled input.",
+    "No existing UI library (Tailwind/MUI) means all primitives must be built from scratch using CSSProperties.",
+    "Existing selectors (workbenchSelectors.ts) must be maintained to ensure data consistency during UI refactor."
+  ],
+  "risks": [
+    "Incomplete extraction of unique edge-case styles (e.g., specific field layouts in AnalysisPanel).",
+    "WebSocket event bursts could cause progress bar flickering if not debounced or smoothed.",
+    "Batch mutations on backend might have different error handling than single-item mutations."
+  ]
+}
