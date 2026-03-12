@@ -31,4 +31,11 @@ Thumbs.db
 .ace-tool/
 
 # bug record
-bug.md
+**/bug.md
+**/.claude
+**/.cursor
+**/.golutra
+**/.magi
+**/.trellis
+**/llmdoc
+**/openspec
