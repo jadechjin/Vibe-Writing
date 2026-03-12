@@ -302,7 +302,7 @@ export function EvidenceMatrixPanel({
 
       <SectionCard
         title="证据与提纲"
-        description={`当前状态：${currentState ?? "Unknown"}。先生成 Evidence Matrix，再筛查并批准 claims，随后补证据与提纲绑定，最后确认 Outline。`}
+        description={`当前状态：${currentState ?? "未知"}。先生成 Evidence Matrix，再筛查并批准 claims，随后补证据与提纲绑定，最后确认 Outline。`}
       >
         <div style={summaryGridStyle}>
           {[

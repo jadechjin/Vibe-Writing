@@ -314,11 +314,11 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
         </div>
 
         {assetsLoading ? (
-          <EmptyState text="Loading assets..." />
+          <EmptyState text="加载资产中..." />
         ) : assetsError ? (
-          <EmptyState text={`Error loading assets: ${assetsError instanceof Error ? assetsError.message : "未知错误"}`} style={{ color: "#fca5a5" }} />
+          <EmptyState text={`加载资产失败：${assetsError instanceof Error ? assetsError.message : "未知错误"}`} style={{ color: "#fca5a5" }} />
         ) : !assets || assets.length === 0 ? (
-          <EmptyState text="No assets found." />
+          <EmptyState text="暂无资产。" />
         ) : (
           <>
             {selectedAssetIds.size > 0 ? (

@@ -423,6 +423,19 @@ function getDecisionLabel(decision: string | null): string {
   }
 }
 
+function getDraftStatusLabel(status: string): string {
+  switch (status) {
+    case "approved":
+      return "已通过"
+    case "needs_review":
+      return "待审阅"
+    case "draft":
+      return "草稿"
+    default:
+      return status
+  }
+}
+
 function getFeedbackKey(kind: "generate" | "approve" | "review", id: string): string {
   return `${kind}:${id}`
 }
@@ -890,7 +903,7 @@ export function DraftPanel({
             <div style={itemTitleStyle}>{section.title}</div>
             <div style={itemMetaStyle}>章节键值：{section.sectionKey}</div>
           </div>
-          {draft ? <span style={badgeStyle(draft.status)}>{draft.status}</span> : null}
+          {draft ? <span style={badgeStyle(draft.status)}>{getDraftStatusLabel(draft.status)}</span> : null}
         </div>
 
         {draft ? (
@@ -986,9 +999,9 @@ export function DraftPanel({
                 })
               }
             >
-              <option value="request_changes">request_changes</option>
-              <option value="approve">approve</option>
-              <option value="freeze">freeze</option>
+              <option value="request_changes">要求修改</option>
+              <option value="approve">批准</option>
+              <option value="freeze">冻结</option>
             </select>
             <label style={fieldLabelStyle} htmlFor={`review-text-${draft.id}`}>
               意见
@@ -1024,7 +1037,7 @@ export function DraftPanel({
       <div style={sectionCardStyle}>
         <div style={titleStyle}>章节起草与审阅</div>
         <div style={descStyle}>
-          当前状态：{currentState ?? "Unknown"}。G5 现在按 latest draft 真相把 section 稳定分成 approved、needs review、ready to generate 三组，避免 transport 顺序把界面搞成一坨。
+          当前状态：{currentState ?? "未知"}。G5 现在按 latest draft 真相把 section 稳定分成 approved、needs review、ready to generate 三组，避免 transport 顺序把界面搞成一坨。
         </div>
         <div style={summaryGridStyle}>
           <div style={summaryCardStyle}>
