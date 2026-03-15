@@ -3,6 +3,7 @@ import type { CSSProperties } from "react"
 import { EmptyEvidenceState } from "./EmptyEvidenceState"
 import { G0EvidencePanel } from "./G0EvidencePanel"
 import { G1EvidencePanel } from "./G1EvidencePanel"
+import { G2EvidencePanel } from "./G2EvidencePanel"
 import type { WorkflowSnapshot, Blocker } from "../../hooks/useProjectStatus"
 
 // ---- Props ----
@@ -163,6 +164,8 @@ export function EvidenceHub({ snapshot, latestBlockers, gateKey, systemId }: Evi
         <G0EvidencePanel systemId={systemId} />
       ) : gateKey === "G1" && systemId ? (
         <G1EvidencePanel systemId={systemId} />
+      ) : gateKey === "G2" && systemId ? (
+        <G2EvidencePanel systemId={systemId} />
       ) : (
         <EmptyEvidenceState
           title={content.title}

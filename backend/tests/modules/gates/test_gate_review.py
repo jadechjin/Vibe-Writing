@@ -9,7 +9,13 @@ from app.modules.gates.service import resolve_active_gate, review_gate
 from app.persistence.base import Base
 from app.persistence.models.asset import Asset, AssetMetadata
 from app.persistence.models.draft import Outline, OutlineAssetBinding, SectionDraft
-from app.persistence.models.evidence import AnalysisRun, Claim, ClaimEvidenceLink, FigurePlan
+from app.persistence.models.evidence import (
+    AnalysisRun,
+    Claim,
+    ClaimEvidenceLink,
+    FigurePlan,
+    FigurePlanAsset,
+)
 from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.project import Project
 from app.persistence.models.skeleton import StructureSkeleton
@@ -24,6 +30,7 @@ ALL_GATE_TABLES = [
     AssetMetadata.__table__,
     AssetManifest.__table__,
     FigurePlan.__table__,
+    FigurePlanAsset.__table__,
     AnalysisRun.__table__,
     Claim.__table__,
     ClaimEvidenceLink.__table__,
@@ -183,23 +190,26 @@ def test_review_gate_g2_returns_blockers_for_missing_assets_and_analysis(session
     assert review.gate == GateKey.G2
     assert review.satisfied is False
     assert {blocker.code for blocker in review.blockers} == {
-        "data_assets_missing",
-        "analysis_not_ready",
+        "no_figure_plan_images",
     }
 
     blockers_by_code = {blocker.code: blocker for blocker in review.blockers}
-    assert blockers_by_code["data_assets_missing"].required_checks == [
+    assert blockers_by_code["no_figure_plan_images"].required_checks == [
         GateRequirementKey.DATA_UPLOADED
     ]
-    assert blockers_by_code["data_assets_missing"].details["asset_count"] == 0
-    assert blockers_by_code["analysis_not_ready"].required_checks == [
-        GateRequirementKey.ANALYSIS_READY
-    ]
-    assert blockers_by_code["analysis_not_ready"].details["succeeded_run_count"] == 0
 
 
 def test_review_gate_g2_passes_with_assets_and_succeeded_analysis(session: Session) -> None:
     system = _create_system(session, status=SystemState.FIGURE_PLAN_READY)
+    plan = FigurePlan(
+        system_id=system.id,
+        figure_no="fig1",
+        title="Figure 1",
+        claim_text="test",
+        status="confirmed",
+    )
+    session.add(plan)
+    session.flush()
     asset = Asset(
         project_id=system.project_id,
         system_id=system.id,
@@ -208,13 +218,22 @@ def test_review_gate_g2_passes_with_assets_and_succeeded_analysis(session: Sessi
         storage_key="assets/figure-1.png",
         uploaded_by="owner-1",
     )
+    session.add(asset)
+    session.flush()
+    session.add(FigurePlanAsset(
+        figure_plan_id=plan.id,
+        asset_id=asset.id,
+        role="source_image",
+        position=0,
+    ))
     run = AnalysisRun(
         system_id=system.id,
-        asset_id=None,
-        run_type="vision",
+        figure_plan_id=plan.id,
+        asset_id=asset.id,
+        run_type="image_analysis",
         status=TaskStatus.SUCCEEDED.value,
     )
-    session.add_all([asset, run])
+    session.add(run)
     session.flush()
 
     review = review_gate(session, system)

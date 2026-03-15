@@ -5,54 +5,47 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import {
   useChatMessages,
   sendChatMessageStream,
-  type ChatMessageDetail,
 } from "../../../hooks/useFigurePlanAssets"
 import { useQueryClient } from "@tanstack/react-query"
 
-type AgentChatProps = Readonly<{
+type AnalysisChatProps = Readonly<{
   planId: string
+  onAnalysisComplete?: () => void
 }>
 
+type LocalMessage = { role: "user" | "assistant"; content: string }
+
 const PROVIDERS = [
-  { key: "claude", label: "Claude" },
-  { key: "codex", label: "Codex" },
-  { key: "gemini", label: "Gemini" },
+  { key: "claude", label: "Claude", degraded: false },
+  { key: "gemini", label: "Gemini", degraded: false },
+  { key: "codex", label: "Codex", degraded: true },
 ] as const
 
 const containerStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "8px",
-  height: "400px",
+  gap: "6px",
+  flex: 1,
+  minHeight: 0,
 }
 
-const labelStyle: CSSProperties = {
-  fontSize: "11px",
-  color: "#94a3b8",
-  fontWeight: 600,
-}
-
-const tabBarStyle: CSSProperties = {
-  display: "flex",
-  gap: "4px",
-}
+const tabBarStyle: CSSProperties = { display: "flex", gap: "4px" }
 
 const tabBase: CSSProperties = {
-  padding: "4px 10px",
+  padding: "3px 10px",
   borderRadius: "6px",
   border: "1px solid rgba(148,163,184,0.15)",
   background: "transparent",
   color: "#94a3b8",
   fontSize: "11px",
-  fontWeight: 600,
   cursor: "pointer",
 }
 
 const tabActive: CSSProperties = {
   ...tabBase,
-  borderColor: "rgba(251,146,60,0.5)",
+  borderColor: "rgba(249,115,22,0.5)",
+  background: "rgba(154,52,18,0.15)",
   color: "#fb923c",
-  background: "rgba(249,115,22,0.08)",
 }
 
 const messagesAreaStyle: CSSProperties = {
@@ -63,19 +56,21 @@ const messagesAreaStyle: CSSProperties = {
   gap: "6px",
   padding: "8px",
   borderRadius: "8px",
-  border: "1px solid rgba(148,163,184,0.08)",
   background: "rgba(15,23,42,0.4)",
+  border: "1px solid rgba(148,163,184,0.08)",
+  minHeight: 0,
 }
 
 const userMsgStyle: CSSProperties = {
   alignSelf: "flex-end",
-  maxWidth: "85%",
+  maxWidth: "80%",
   padding: "6px 10px",
-  borderRadius: "8px 8px 2px 8px",
-  background: "rgba(30,41,59,0.8)",
-  border: "1px solid rgba(251,146,60,0.2)",
+  borderRadius: "10px 10px 2px 10px",
+  background: "rgba(249,115,22,0.12)",
+  border: "1px solid rgba(249,115,22,0.2)",
   fontSize: "12px",
   color: "#e2e8f0",
+  lineHeight: 1.5,
   whiteSpace: "pre-wrap",
   wordBreak: "break-word",
 }
@@ -84,11 +79,12 @@ const assistantMsgStyle: CSSProperties = {
   alignSelf: "flex-start",
   maxWidth: "85%",
   padding: "6px 10px",
-  borderRadius: "8px 8px 8px 2px",
-  background: "rgba(15,23,42,0.5)",
+  borderRadius: "10px 10px 10px 2px",
+  background: "rgba(148,163,184,0.08)",
   border: "1px solid rgba(148,163,184,0.1)",
   fontSize: "12px",
-  color: "#e2e8f0",
+  color: "#cbd5e1",
+  lineHeight: 1.5,
   whiteSpace: "pre-wrap",
   wordBreak: "break-word",
 }
@@ -96,6 +92,7 @@ const assistantMsgStyle: CSSProperties = {
 const inputRowStyle: CSSProperties = {
   display: "flex",
   gap: "6px",
+  alignItems: "flex-end",
 }
 
 const textareaStyle: CSSProperties = {
@@ -113,7 +110,7 @@ const textareaStyle: CSSProperties = {
   lineHeight: 1.4,
 }
 
-const sendBtnBase: CSSProperties = {
+const btnBase: CSSProperties = {
   padding: "6px 14px",
   borderRadius: "8px",
   border: "1px solid rgba(249,115,22,0.5)",
@@ -125,37 +122,26 @@ const sendBtnBase: CSSProperties = {
   whiteSpace: "nowrap",
 }
 
-const sendBtnDisabled: CSSProperties = {
-  ...sendBtnBase,
-  opacity: 0.5,
-  cursor: "not-allowed",
+const btnDisabled: CSSProperties = { ...btnBase, opacity: 0.5, cursor: "not-allowed" }
+
+const analyzeBtnStyle: CSSProperties = {
+  ...btnBase,
+  borderColor: "rgba(74,222,128,0.5)",
+  background: "rgba(22,101,52,0.15)",
+  color: "#4ade80",
 }
 
-const thinkingStyle: CSSProperties = {
-  ...assistantMsgStyle,
-  color: "#64748b",
-  fontStyle: "italic",
-}
+const errorStyle: CSSProperties = { fontSize: "11px", color: "#f87171" }
+const emptyStyle: CSSProperties = { fontSize: "12px", color: "#64748b", textAlign: "center", padding: "20px 0" }
+const thinkingStyle: CSSProperties = { ...assistantMsgStyle, color: "#64748b", fontStyle: "italic" }
 
-const emptyStyle: CSSProperties = {
-  fontSize: "11px",
-  color: "#475569",
-  textAlign: "center",
-  padding: "20px 0",
-}
+const AUTO_ANALYSIS_PROMPT = `请对这张图片进行深度分析：
+1. 描述图片内容（图表类型、轴标签、数据趋势、关键数值）
+2. 使用学术搜索工具查找相关文献
+3. 使用知识库工具检索相关数据
+4. 输出结构化分析结果（JSON 格式，包含中文摘要、文献引用、置信度评估）`
 
-const errorStyle: CSSProperties = {
-  fontSize: "11px",
-  color: "#fca5a5",
-  marginTop: "4px",
-}
-
-type LocalMessage = {
-  role: "user" | "assistant"
-  content: string
-}
-
-export function AgentChat({ planId }: AgentChatProps) {
+export function AnalysisChat({ planId, onAnalysisComplete }: AnalysisChatProps) {
   const [provider, setProvider] = useState<string>("claude")
   const [input, setInput] = useState("")
   const [isSending, setIsSending] = useState(false)
@@ -169,13 +155,11 @@ export function AgentChat({ planId }: AgentChatProps) {
 
   const { data: serverMessages } = useChatMessages(planId, provider)
 
-  // Merge server messages with local streaming state
   const displayMessages: LocalMessage[] = [
     ...(serverMessages ?? []).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     ...localMessages,
   ]
 
-  // Auto-scroll chat container (scoped, not page-level)
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
     const container = messagesAreaRef.current
     if (!container) return
@@ -194,87 +178,75 @@ export function AgentChat({ planId }: AgentChatProps) {
     scrollMessagesToBottom("auto")
   }, [streamingText, scrollMessagesToBottom])
 
-  // Reset local state when switching provider and abort ongoing request
   useEffect(() => {
     setLocalMessages([])
     setStreamingText("")
     setError(null)
-
-    return () => {
-      abortRef.current?.abort()
-    }
+    return () => { abortRef.current?.abort() }
   }, [provider])
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim()
-    if (!text || isSending) return
-
+  const doSend = useCallback(async (text: string) => {
+    if (!text.trim() || isSending) return
     setInput("")
     setError(null)
     setIsSending(true)
-    setLocalMessages((prev) => [...prev, { role: "user", content: text }])
+    setLocalMessages((prev) => [...prev, { role: "user", content: text.trim() }])
     setStreamingText("")
 
     const controller = new AbortController()
     abortRef.current = controller
 
     try {
-      await sendChatMessageStream(planId, provider, text, {
-        onDelta: (chunk) => {
-          setStreamingText((prev) => prev + chunk)
-        },
-        onDone: () => {
-          // cleanup handled in finally block
-        },
-        onError: (err) => {
-          setError(err)
-        },
+      await sendChatMessageStream(planId, provider, text.trim(), {
+        onDelta: (chunk) => setStreamingText((prev) => prev + chunk),
+        onDone: () => { onAnalysisComplete?.() },
+        onError: (err) => setError(err),
       }, controller.signal)
     } catch (err) {
-      if (err instanceof Error && err.name !== "AbortError") {
-        setError(err.message)
-      }
+      if (err instanceof Error && err.name !== "AbortError") setError(err.message)
     } finally {
       setIsSending(false)
       abortRef.current = null
       setLocalMessages([])
       setStreamingText("")
       queryClient.invalidateQueries({ queryKey: ["figure-plan-chat", planId, provider] })
+      queryClient.invalidateQueries({ queryKey: ["image-analyses"] })
     }
-  }, [input, isSending, planId, provider, queryClient])
+  }, [isSending, planId, provider, queryClient, onAnalysisComplete])
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault()
-        handleSend()
-      }
-    },
-    [handleSend],
-  )
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      doSend(input)
+    }
+  }, [doSend, input])
+
+  const selectedProvider = PROVIDERS.find((p) => p.key === provider)
 
   return (
     <div style={containerStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={labelStyle}>AI 讨论</div>
+        <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600 }}>AI 分析</div>
         <div style={tabBarStyle}>
           {PROVIDERS.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              style={provider === p.key ? tabActive : tabBase}
-              onClick={() => setProvider(p.key)}
-              disabled={isSending}
-            >
+            <button key={p.key} type="button" style={provider === p.key ? tabActive : tabBase}
+              onClick={() => setProvider(p.key)} disabled={isSending}>
               {p.label}
             </button>
           ))}
         </div>
       </div>
 
+      {selectedProvider?.degraded ? (
+        <div style={{ fontSize: "11px", color: "#fb923c", padding: "4px 8px", borderRadius: "6px",
+          background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.15)" }}>
+          Codex 不支持 MCP 工具调用，学术搜索和知识库检索功能将不可用。
+        </div>
+      ) : null}
+
       <div ref={messagesAreaRef} style={messagesAreaStyle}>
         {displayMessages.length === 0 && !streamingText ? (
-          <div style={emptyStyle}>选择 Agent 开始讨论图表规划</div>
+          <div style={emptyStyle}>点击「自动分析」或输入问题开始</div>
         ) : (
           <>
             {displayMessages.map((msg, i) => (
@@ -282,34 +254,26 @@ export function AgentChat({ planId }: AgentChatProps) {
                 {msg.content}
               </div>
             ))}
-            {streamingText ? (
-              <div style={assistantMsgStyle}>{streamingText}</div>
-            ) : null}
-            {isSending && !streamingText ? (
-              <div style={thinkingStyle}>思考中...</div>
-            ) : null}
+            {streamingText ? <div style={assistantMsgStyle}>{streamingText}</div> : null}
+            {isSending && !streamingText ? <div style={thinkingStyle}>分析中...</div> : null}
           </>
         )}
       </div>
 
       {error ? <div style={errorStyle}>{error}</div> : null}
 
+      <div style={{ display: "flex", gap: "6px" }}>
+        <button type="button" style={isSending ? { ...analyzeBtnStyle, ...btnDisabled } : analyzeBtnStyle}
+          disabled={isSending} onClick={() => doSend(AUTO_ANALYSIS_PROMPT)}>
+          自动分析
+        </button>
+      </div>
+
       <div style={inputRowStyle}>
-        <textarea
-          style={textareaStyle}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="输入消息... (Ctrl+Enter 发送)"
-          disabled={isSending}
-          rows={1}
-        />
-        <button
-          type="button"
-          style={isSending ? sendBtnDisabled : sendBtnBase}
-          disabled={isSending || !input.trim()}
-          onClick={handleSend}
-        >
+        <textarea style={textareaStyle} value={input} onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown} placeholder="输入问题... (Ctrl+Enter 发送)" disabled={isSending} rows={1} />
+        <button type="button" style={isSending || !input.trim() ? btnDisabled : btnBase}
+          disabled={isSending || !input.trim()} onClick={() => doSend(input)}>
           {isSending ? "..." : "发送"}
         </button>
       </div>

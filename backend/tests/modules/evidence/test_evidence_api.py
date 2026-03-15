@@ -756,6 +756,160 @@ def test_list_claims_empty(client: TestClient, engine) -> None:
     assert body["data"] == []
 
 
+def test_list_image_analyses_returns_assets_and_latest_succeeded_run(
+    client: TestClient,
+    engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.modules.evidence.service.generate_presigned_url",
+        lambda storage_key, expires=3600: f"https://example.test/{storage_key}?expires={expires}",
+    )
+
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        plan_one = _create_figure_plan(
+            session,
+            system_id=system.id,
+            figure_no="fig1",
+            title="Figure 1",
+        )
+        plan_two = _create_figure_plan(
+            session,
+            system_id=system.id,
+            figure_no="fig2",
+            title="Figure 2",
+        )
+        asset_one = _create_asset_with_analysis(
+            session,
+            project_id=project.id,
+            system_id=system.id,
+            file_name="fig-1.png",
+            storage_key="uploads/fig-1.png",
+        )
+        asset_two = _create_asset_with_analysis(
+            session,
+            project_id=project.id,
+            system_id=system.id,
+            file_name="fig-2.png",
+            storage_key="uploads/fig-2.png",
+        )
+        session.add_all(
+            [
+                FigurePlanAsset(
+                    figure_plan_id=plan_one.id,
+                    asset_id=asset_one.id,
+                    role="source_image",
+                    position=0,
+                ),
+                FigurePlanAsset(
+                    figure_plan_id=plan_two.id,
+                    asset_id=asset_two.id,
+                    role="source_image",
+                    position=0,
+                ),
+            ]
+        )
+        session.flush()
+        older_run = AnalysisRun(
+            system_id=system.id,
+            figure_plan_id=plan_one.id,
+            asset_id=asset_one.id,
+            run_type="image_analysis",
+            analysis_type="comprehensive",
+            status=TaskStatus.SUCCEEDED.value,
+            summary="Older run",
+            result_payload_json={"confidence": 0.41},
+            started_at=datetime(2026, 3, 14, tzinfo=UTC),
+        )
+        latest_run = AnalysisRun(
+            system_id=system.id,
+            figure_plan_id=plan_one.id,
+            asset_id=asset_one.id,
+            run_type="image_analysis",
+            analysis_type="comprehensive",
+            status=TaskStatus.SUCCEEDED.value,
+            summary="Strong signal detected",
+            result_payload_json={"confidence": 0.93},
+            started_at=datetime(2026, 3, 15, tzinfo=UTC),
+        )
+        session.add_all([older_run, latest_run])
+        session.flush()
+        older_run.created_at = datetime(2026, 3, 14, tzinfo=UTC)
+        older_run.updated_at = datetime(2026, 3, 14, tzinfo=UTC)
+        latest_run.created_at = datetime(2026, 3, 15, tzinfo=UTC)
+        latest_run.updated_at = datetime(2026, 3, 15, tzinfo=UTC)
+        session.commit()
+        system_id = system.id
+        asset_one_id = asset_one.id
+        latest_run_id = latest_run.id
+
+    response = client.get(f"/api/systems/{system_id}/image-analyses")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["total"] == 2
+    assert body["data"]["analyzed"] == 1
+    assert body["data"]["pending"] == 1
+    assert [item["figureNo"] for item in body["data"]["items"]] == ["fig1", "fig2"]
+    assert body["data"]["items"][0]["assets"][0]["id"] == asset_one_id
+    assert body["data"]["items"][0]["assets"][0]["fileName"] == "fig-1.png"
+    assert body["data"]["items"][0]["assets"][0]["previewUrl"] == "https://example.test/uploads/fig-1.png?expires=3600"
+    assert body["data"]["items"][0]["latestAnalysis"]["id"] == latest_run_id
+    assert body["data"]["items"][0]["latestAnalysis"]["summary"] == "Strong signal detected"
+    assert body["data"]["items"][0]["latestAnalysis"]["confidence"] == 0.93
+    assert body["data"]["items"][1]["latestAnalysis"] is None
+
+
+def test_trigger_figure_plan_analysis_creates_queued_run(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        plan = _create_figure_plan(session, system_id=system.id)
+        asset = Asset(
+            project_id=project.id,
+            system_id=system.id,
+            asset_type="image",
+            file_name="analysis.png",
+            storage_key="uploads/analysis.png",
+            uploaded_by="owner-1",
+        )
+        session.add(asset)
+        session.flush()
+        session.add(
+            FigurePlanAsset(
+                figure_plan_id=plan.id,
+                asset_id=asset.id,
+                role="source_image",
+                position=0,
+            )
+        )
+        session.commit()
+        plan_id = plan.id
+        asset_id = asset.id
+
+    response = client.post(
+        f"/api/figure-plans/{plan_id}/analyze",
+        json={"assetId": asset_id, "analysisType": "comprehensive"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["status"] == TaskStatus.QUEUED.value
+    assert body["data"]["summary"] is None
+
+    with Session(engine) as session:
+        run = session.scalars(select(AnalysisRun).where(AnalysisRun.asset_id == asset_id)).one()
+
+    assert run.figure_plan_id == plan_id
+    assert run.analysis_type == "comprehensive"
+    assert run.status == TaskStatus.QUEUED.value
+    assert run.run_type == "image_analysis"
+
+
 def test_approve_claim(client: TestClient, engine) -> None:
     with Session(engine) as session:
         project = _create_project(session)

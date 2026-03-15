@@ -40,7 +40,9 @@ const sidebarStyle: CSSProperties = {
 const sidebarItemBase: CSSProperties = {
   padding: "8px 14px", fontSize: "12px", fontWeight: 600,
   cursor: "pointer", color: "#94a3b8",
-  borderLeft: "3px solid transparent",
+  borderLeftWidth: "3px",
+  borderLeftStyle: "solid",
+  borderLeftColor: "transparent",
 }
 
 const sidebarItemActive: CSSProperties = {

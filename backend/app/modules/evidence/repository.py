@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from inspect import isawaitable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -162,6 +162,51 @@ async def list_analysis_runs_for_system(session: SessionLike, system_id: str) ->
     )
     result = await _maybe_await(session.execute(statement))
     return list(result.scalars().all())
+
+
+async def list_analysis_runs_for_figure_plans(
+    session: SessionLike,
+    figure_plan_ids: list[str],
+) -> list[AnalysisRun]:
+    if not figure_plan_ids:
+        return []
+
+    statement = (
+        select(AnalysisRun)
+        .where(AnalysisRun.figure_plan_id.in_(figure_plan_ids))
+        .order_by(
+            AnalysisRun.updated_at.desc(),
+            AnalysisRun.created_at.desc(),
+            AnalysisRun.id.desc(),
+        )
+    )
+    result = await _maybe_await(session.execute(statement))
+    return list(result.scalars().all())
+
+
+async def create_analysis_run(
+    session: SessionLike,
+    *,
+    system_id: str,
+    figure_plan_id: str | None = None,
+    asset_id: str | None = None,
+    run_type: str = "image_analysis",
+    analysis_type: str = "comprehensive",
+    status: str = "queued",
+    input_payload_json: dict[str, Any] | None = None,
+) -> AnalysisRun:
+    run = AnalysisRun(
+        system_id=system_id,
+        figure_plan_id=figure_plan_id,
+        asset_id=asset_id,
+        run_type=run_type,
+        analysis_type=analysis_type,
+        status=status,
+        input_payload_json=input_payload_json or {},
+    )
+    session.add(run)
+    await _maybe_await(session.flush())
+    return run
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +396,41 @@ async def list_figure_plan_assets_with_details(
     return list(result.all())
 
 
+async def list_figure_plan_assets_for_system(
+    session: SessionLike,
+    system_id: str,
+) -> list[tuple[FigurePlanAsset, Asset]]:
+    statement = (
+        select(FigurePlanAsset, Asset)
+        .join(FigurePlan, FigurePlanAsset.figure_plan_id == FigurePlan.id)
+        .join(Asset, FigurePlanAsset.asset_id == Asset.id)
+        .where(FigurePlan.system_id == system_id)
+        .order_by(
+            FigurePlan.figure_no.asc(),
+            FigurePlan.version.asc(),
+            FigurePlanAsset.position.asc(),
+            FigurePlanAsset.created_at.asc(),
+            FigurePlanAsset.id.asc(),
+        )
+    )
+    result = await _maybe_await(session.execute(statement))
+    return list(result.all())
+
+
+async def get_figure_plan_asset_by_asset_id(
+    session: SessionLike,
+    *,
+    figure_plan_id: str,
+    asset_id: str,
+) -> FigurePlanAsset | None:
+    statement = select(FigurePlanAsset).where(
+        FigurePlanAsset.figure_plan_id == figure_plan_id,
+        FigurePlanAsset.asset_id == asset_id,
+    )
+    result = await _maybe_await(session.execute(statement))
+    return result.scalar_one_or_none()
+
+
 async def get_figure_plan_asset(session: SessionLike, binding_id: str) -> FigurePlanAsset | None:
     statement = select(FigurePlanAsset).where(FigurePlanAsset.id == binding_id)
     result = await _maybe_await(session.execute(statement))
@@ -476,6 +556,7 @@ async def update_chat_message_fields(
 __all__ = [
     "create_chat_message",
     "create_chat_session",
+    "create_analysis_run",
     "create_claim",
     "create_claim_evidence_link",
     "create_figure_plan",
@@ -488,17 +569,20 @@ __all__ = [
     "get_claim",
     "get_figure_plan",
     "get_figure_plan_asset",
+    "get_figure_plan_asset_by_asset_id",
     "get_next_claim_version",
     "get_next_figure_plan_version",
     "get_next_turn_index",
     "get_system_with_project",
     "is_chat_session_busy",
+    "list_analysis_runs_for_figure_plans",
     "list_analysis_runs_for_system",
     "list_assets_for_system",
     "list_chat_messages",
     "list_claim_evidence_links_for_system",
     "list_claims",
     "list_figure_plan_assets",
+    "list_figure_plan_assets_for_system",
     "list_figure_plan_assets_with_details",
     "list_figure_plans",
     "list_links_for_claim",

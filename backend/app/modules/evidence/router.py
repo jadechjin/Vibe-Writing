@@ -10,6 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.websocket import get_broadcaster
 from app.common.schemas import ApiResponse
+from app.modules.assets.schemas import (
+    AnalysisRunSummary,
+    FigurePlanAnalyzeRequest,
+    ImageAnalysisListResponse,
+)
 from app.modules.evidence.schemas import (
     BatchApproveClaimsRequest,
     BatchApproveClaimsResponse,
@@ -73,6 +78,9 @@ from app.modules.evidence.service import (
     list_figure_plans as list_figure_plans_service,
 )
 from app.modules.evidence.service import (
+    list_image_analyses as list_image_analyses_service,
+)
+from app.modules.evidence.service import (
     patch_figure_plan as patch_figure_plan_service,
 )
 from app.modules.evidence.service import (
@@ -80,6 +88,9 @@ from app.modules.evidence.service import (
 )
 from app.modules.evidence.service import (
     transition_figure_plan_status as transition_figure_plan_status_service,
+)
+from app.modules.evidence.service import (
+    trigger_figure_plan_analysis as trigger_figure_plan_analysis_service,
 )
 from app.modules.evidence.service import (
     update_figure_plan_brief as update_figure_plan_brief_service,
@@ -129,6 +140,18 @@ async def list_figure_plans(
 ) -> ApiResponse[list[FigurePlanDetail]]:
     plans = await list_figure_plans_service(session, system_id)
     return ApiResponse(data=plans)
+
+
+@router.get(
+    "/systems/{system_id}/image-analyses",
+    response_model=ApiResponse[ImageAnalysisListResponse],
+)
+async def list_image_analyses(
+    system_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ImageAnalysisListResponse]:
+    results = await list_image_analyses_service(session, system_id)
+    return ApiResponse(data=results)
 
 
 @router.post(
@@ -326,6 +349,20 @@ async def delete_figure_plan_asset(
     session: AsyncSession = Depends(get_db_session),
 ) -> None:
     await delete_figure_plan_asset_binding_service(session, plan_id, binding_id)
+
+
+@router.post(
+    "/figure-plans/{plan_id}/analyze",
+    response_model=ApiResponse[AnalysisRunSummary],
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def trigger_figure_plan_analysis(
+    plan_id: str,
+    payload: FigurePlanAnalyzeRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[AnalysisRunSummary]:
+    result = await trigger_figure_plan_analysis_service(session, plan_id, payload)
+    return ApiResponse(data=result)
 
 
 # ---------------------------------------------------------------------------

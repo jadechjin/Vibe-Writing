@@ -2,14 +2,20 @@ from __future__ import annotations
 
 from typing import Callable, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.common.enums import GATE_REQUIREMENTS, GateKey, GateRequirementKey, SystemState, TaskStatus
 from app.common.schemas import Blocker, GateReview
 from app.persistence.models.asset import Asset, AssetMetadata
 from app.persistence.models.draft import Outline, OutlineAssetBinding, SectionDraft
-from app.persistence.models.evidence import AnalysisRun, Claim, ClaimEvidenceLink, FigurePlan
+from app.persistence.models.evidence import (
+    AnalysisRun,
+    Claim,
+    ClaimEvidenceLink,
+    FigurePlan,
+    FigurePlanAsset,
+)
 from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.skeleton import StructureSkeleton
 from app.persistence.models.system import ExperimentalSystem, SystemSection
@@ -114,42 +120,91 @@ def check_figure_plan_ready(session: Session, system: ExperimentalSystem) -> lis
 
 
 def check_data_and_analysis_ready(session: Session, system: ExperimentalSystem) -> list[Blocker]:
-    assets = session.scalars(select(Asset).where(Asset.system_id == system.id)).all()
-    succeeded_run_count = len(
-        session.scalars(
-            select(AnalysisRun).where(
-                AnalysisRun.system_id == system.id,
-                AnalysisRun.status == TaskStatus.SUCCEEDED.value,
-            )
-        ).all()
-    )
+    # New logic: check figure-plan-level analysis coverage
+    plans = session.scalars(
+        select(FigurePlan).where(FigurePlan.system_id == system.id)
+    ).all()
+    latest_plans = _latest_by_version(plans, key=lambda p: p.figure_no)
+    confirmed_plans = [p for p in latest_plans if _is_confirmed_status(p.status)]
 
-    blockers: list[Blocker] = []
-    if not assets:
-        blockers.append(
-            _build_blocker(
-                code="data_assets_missing",
-                message="System data assets are missing.",
-                gate=GateKey.G2,
-                current_state=system.status,
-                required_checks=[GateRequirementKey.DATA_UPLOADED],
-                details={"asset_count": 0},
+    # Find plans that have uploaded images
+    plans_with_images: list[FigurePlan] = []
+    for plan in confirmed_plans:
+        image_count = session.scalar(
+            select(func.count(FigurePlanAsset.id)).where(
+                FigurePlanAsset.figure_plan_id == plan.id
             )
         )
+        if image_count and image_count > 0:
+            plans_with_images.append(plan)
 
-    if succeeded_run_count == 0:
-        blockers.append(
+    if not plans_with_images:
+        # Fallback: check old-style assets + analysis runs for backward compat
+        assets = session.scalars(select(Asset).where(Asset.system_id == system.id)).all()
+        old_succeeded = session.scalar(
+            select(func.count(AnalysisRun.id)).where(
+                AnalysisRun.system_id == system.id,
+                AnalysisRun.status == TaskStatus.SUCCEEDED.value,
+                AnalysisRun.figure_plan_id.is_(None),
+            )
+        )
+        if assets and old_succeeded and old_succeeded > 0:
+            return []  # Old-style data passes
+
+        blockers: list[Blocker] = []
+        if not assets:
+            blockers.append(
+                _build_blocker(
+                    code="no_figure_plan_images",
+                    message="No figure plans have uploaded images.",
+                    gate=GateKey.G2,
+                    current_state=system.status,
+                    required_checks=[GateRequirementKey.DATA_UPLOADED],
+                    details={"confirmed_plan_count": len(confirmed_plans)},
+                )
+            )
+        else:
+            blockers.append(
+                _build_blocker(
+                    code="analysis_not_ready",
+                    message="System analysis is not ready.",
+                    gate=GateKey.G2,
+                    current_state=system.status,
+                    required_checks=[GateRequirementKey.ANALYSIS_READY],
+                    details={"succeeded_run_count": 0},
+                )
+            )
+        return blockers
+
+    # Check each plan with images has a succeeded analysis
+    unanalyzed: list[str] = []
+    for plan in plans_with_images:
+        has_analysis = session.scalar(
+            select(AnalysisRun.id).where(
+                AnalysisRun.figure_plan_id == plan.id,
+                AnalysisRun.status == TaskStatus.SUCCEEDED.value,
+            ).limit(1)
+        )
+        if not has_analysis:
+            unanalyzed.append(plan.figure_no)
+
+    if unanalyzed:
+        return [
             _build_blocker(
-                code="analysis_not_ready",
-                message="System analysis is not ready.",
+                code="analysis_incomplete",
+                message=f"Analysis incomplete for {len(unanalyzed)} figure plans.",
                 gate=GateKey.G2,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.ANALYSIS_READY],
-                details={"succeeded_run_count": 0},
+                details={
+                    "unanalyzed_plans": unanalyzed,
+                    "analyzed": len(plans_with_images) - len(unanalyzed),
+                    "total": len(plans_with_images),
+                },
             )
-        )
+        ]
 
-    return blockers
+    return []
 
 
 def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list[Blocker]:

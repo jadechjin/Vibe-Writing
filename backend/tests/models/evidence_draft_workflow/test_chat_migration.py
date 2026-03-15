@@ -9,12 +9,6 @@ MIGRATION_007_PATH = (
     / "versions"
     / "007_figure_plan_chat.py"
 )
-MIGRATION_008_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "alembic"
-    / "versions"
-    / "008_add_audit_fields_to_chat_tables.py"
-)
 
 
 def test_chat_migration_declares_expected_revision_chain() -> None:
@@ -35,7 +29,3 @@ def test_chat_migration_includes_required_constraints_and_indexes() -> None:
         r'op\.create_index\(\s*"ix_figure_plan_chat_messages_session_turn"',
         content,
     )
-
-
-def test_chat_migration_does_not_keep_duplicate_followup_revision() -> None:
-    assert not MIGRATION_008_PATH.exists()

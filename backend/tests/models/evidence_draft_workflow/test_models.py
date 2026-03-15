@@ -123,6 +123,7 @@ def test_relationship_targets_match_expected_core_tables() -> None:
     assert _foreign_key_targets(FigurePlan, "system_id") == {"experimental_systems.id"}
     assert _foreign_key_targets(FigurePlanAsset, "figure_plan_id") == {"figure_plans.id"}
     assert _foreign_key_targets(FigurePlanAsset, "asset_id") == {"assets.id"}
+    assert _foreign_key_targets(AnalysisRun, "figure_plan_id") == {"figure_plans.id"}
     assert _foreign_key_targets(ClaimEvidenceLink, "claim_record_id") == {"claims.id"}
     assert _foreign_key_targets(OutlineAssetBinding, "outline_id") == {"outlines.id"}
     assert _foreign_key_targets(ReviewComment, "draft_id") == {"section_drafts.id"}
@@ -138,9 +139,11 @@ def test_uniqueness_and_defaults_match_workflow_requirements() -> None:
     assert "uq_workflow_instances_scope_key_version" in _unique_constraint_names(WorkflowInstance)
     assert "ix_claim_evidence_links_unique_without_run" in _index_names(ClaimEvidenceLink)
     assert "ix_claim_evidence_links_unique_with_run" in _index_names(ClaimEvidenceLink)
+    assert "ix_analysis_runs_figure_plan_id" in _index_names(AnalysisRun)
 
     assert FigurePlan.__table__.c.version.default.arg == 1
     assert AnalysisRun.__table__.c.status.default.arg == TaskStatus.QUEUED.value
+    assert AnalysisRun.__table__.c.analysis_type.default.arg == "comprehensive"
     assert WorkflowInstance.__table__.c.current_state.default.arg == SystemState.DRAFT.value
 
 
@@ -153,6 +156,7 @@ def test_claim_evidence_links_enforce_uniqueness_for_null_and_non_null_analysis_
             ExperimentalSystem.__table__,
             Asset.__table__,
             AssetManifest.__table__,
+            FigurePlan.__table__,
             Claim.__table__,
             AnalysisRun.__table__,
             ClaimEvidenceLink.__table__,
@@ -229,6 +233,7 @@ def test_claim_evidence_links_block_deleting_referenced_analysis_run() -> None:
             ExperimentalSystem.__table__,
             Asset.__table__,
             AssetManifest.__table__,
+            FigurePlan.__table__,
             Claim.__table__,
             AnalysisRun.__table__,
             ClaimEvidenceLink.__table__,

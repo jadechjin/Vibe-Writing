@@ -18,6 +18,15 @@ from app.common.errors import ErrorCode
 from app.common.events import TaskEvent
 from app.common.storage import generate_presigned_url
 from app.core.exceptions import AppException
+from app.modules.assets.schemas import (
+    AnalysisRunSummary,
+    FigurePlanAnalyzeRequest,
+    ImageAnalysisItem,
+    ImageAnalysisListResponse,
+)
+from app.modules.assets.schemas import (
+    FigurePlanAssetDetail as ImageAnalysisAssetDetail,
+)
 from app.modules.assets.service import create_asset_from_upload
 from app.modules.evidence import repository
 from app.modules.evidence.chat_provider import (
@@ -362,6 +371,108 @@ async def list_figure_plans(session: SessionLike, system_id: str) -> list[Figure
     return [_build_figure_plan_detail(plan) for plan in plans]
 
 
+async def list_image_analyses(
+    session: SessionLike,
+    system_id: str,
+) -> ImageAnalysisListResponse:
+    system = await repository.get_system_with_project(session, system_id)
+    if system is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="System not found",
+            status_code=404,
+            details={"system_id": system_id},
+        )
+
+    plans = await repository.list_figure_plans(session, system_id)
+    if not plans:
+        return ImageAnalysisListResponse(items=[], total=0, analyzed=0, pending=0)
+
+    plan_ids = [plan.id for plan in plans]
+    asset_rows = await repository.list_figure_plan_assets_for_system(session, system_id)
+    assets_by_plan_id: dict[str, list[ImageAnalysisAssetDetail]] = {plan.id: [] for plan in plans}
+    for binding, asset in asset_rows:
+        assets_by_plan_id.setdefault(binding.figure_plan_id, []).append(
+            _build_image_analysis_asset_detail(asset)
+        )
+
+    analysis_runs = await repository.list_analysis_runs_for_figure_plans(session, plan_ids)
+    latest_run_by_plan_id = _index_latest_succeeded_runs_by_figure_plan_id(analysis_runs)
+
+    items: list[ImageAnalysisItem] = []
+    analyzed = 0
+    for plan in plans:
+        latest_analysis = None
+        run = latest_run_by_plan_id.get(plan.id)
+        if run is not None:
+            latest_analysis = _build_analysis_run_summary(run)
+            analyzed += 1
+
+        items.append(
+            ImageAnalysisItem(
+                figure_plan_id=plan.id,
+                figure_no=plan.figure_no,
+                title=plan.title,
+                section_key=plan.section_key,
+                assets=assets_by_plan_id.get(plan.id, []),
+                latest_analysis=latest_analysis,
+            )
+        )
+
+    total = len(items)
+    return ImageAnalysisListResponse(
+        items=items,
+        total=total,
+        analyzed=analyzed,
+        pending=total - analyzed,
+    )
+
+
+async def trigger_figure_plan_analysis(
+    session: SessionLike,
+    plan_id: str,
+    payload: FigurePlanAnalyzeRequest,
+) -> AnalysisRunSummary:
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+
+    binding = await repository.get_figure_plan_asset_by_asset_id(
+        session,
+        figure_plan_id=plan_id,
+        asset_id=payload.asset_id,
+    )
+    if binding is None:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message="Asset is not bound to this figure plan",
+            status_code=422,
+            details={"plan_id": plan_id, "asset_id": payload.asset_id},
+        )
+
+    run = await repository.create_analysis_run(
+        session,
+        system_id=plan.system_id,
+        figure_plan_id=plan.id,
+        asset_id=binding.asset_id,
+        run_type="image_analysis",
+        analysis_type=payload.analysis_type,
+        status=TaskStatus.QUEUED.value,
+        input_payload_json={
+            "figure_plan_id": plan.id,
+            "asset_id": binding.asset_id,
+            "analysis_type": payload.analysis_type,
+        },
+    )
+    await _maybe_await(session.commit())
+    return _build_analysis_run_summary(run)
+
+
 async def confirm_figure_plan(
     session: SessionLike,
     plan_id: str,
@@ -641,6 +752,39 @@ def _build_figure_plan_detail(plan: FigurePlan) -> FigurePlanDetail:
         created_at=plan.created_at,
         updated_at=plan.updated_at,
     )
+
+
+def _build_image_analysis_asset_detail(asset: Asset) -> ImageAnalysisAssetDetail:
+    return ImageAnalysisAssetDetail(
+        id=asset.id,
+        file_name=asset.file_name,
+        mime_type=asset.mime_type,
+        preview_url=_safe_presigned_url(asset.storage_key),
+    )
+
+
+def _build_analysis_run_summary(run: AnalysisRun) -> AnalysisRunSummary:
+    return AnalysisRunSummary(
+        id=run.id,
+        status=run.status,
+        summary=run.summary,
+        confidence=_extract_analysis_confidence(run),
+        updated_at=run.updated_at,
+    )
+
+
+def _extract_analysis_confidence(run: AnalysisRun) -> float | None:
+    raw_value = (run.result_payload_json or {}).get("confidence")
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, (int, float)):
+        return float(raw_value)
+    if isinstance(raw_value, str):
+        try:
+            return float(raw_value)
+        except ValueError:
+            return None
+    return None
 
 
 async def _publish_task_event(
@@ -1097,8 +1241,32 @@ def _index_latest_succeeded_runs(analysis_runs: list[AnalysisRun]) -> dict[str, 
     for run in analysis_runs:
         if run.asset_id is None or run.status != TaskStatus.SUCCEEDED.value:
             continue
-        indexed.setdefault(run.asset_id, run)
+        current = indexed.get(run.asset_id)
+        if current is None or _analysis_run_recency_key(run) > _analysis_run_recency_key(current):
+            indexed[run.asset_id] = run
     return indexed
+
+
+def _index_latest_succeeded_runs_by_figure_plan_id(
+    analysis_runs: list[AnalysisRun],
+) -> dict[str, AnalysisRun]:
+    indexed: dict[str, AnalysisRun] = {}
+    for run in analysis_runs:
+        if run.figure_plan_id is None or run.status != TaskStatus.SUCCEEDED.value:
+            continue
+        current = indexed.get(run.figure_plan_id)
+        if current is None or _analysis_run_recency_key(run) > _analysis_run_recency_key(current):
+            indexed[run.figure_plan_id] = run
+    return indexed
+
+
+def _analysis_run_recency_key(run: AnalysisRun) -> tuple[datetime, datetime, str]:
+    timestamp_floor = datetime.min.replace(tzinfo=UTC)
+    return (
+        run.updated_at or timestamp_floor,
+        run.created_at or timestamp_floor,
+        run.id,
+    )
 
 
 async def _record_generation_failure(
@@ -1575,11 +1743,13 @@ __all__ = [
     "list_chat_messages_for_plan",
     "list_claims",
     "list_figure_plan_assets",
+    "list_image_analyses",
     "list_figure_plans",
     "patch_figure_plan",
     "run_evidence_matrix_generation_task",
     "run_figure_plan_generation_task",
     "send_chat_message_stream",
+    "trigger_figure_plan_analysis",
     "transition_figure_plan_status",
     "update_figure_plan_brief",
     "upload_figure_plan_asset",

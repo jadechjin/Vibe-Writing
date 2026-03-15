@@ -157,9 +157,53 @@ class AnalysisRunDetail(CamelModel):
     updated_at: datetime
 
 
+class AnalysisRunSummary(CamelModel):
+    id: str
+    status: str
+    summary: str | None = None
+    confidence: float | None = None
+    updated_at: datetime | None = None
+
+
+class FigurePlanAssetDetail(CamelModel):
+    id: str
+    file_name: str
+    mime_type: str | None = None
+    preview_url: str | None = None
+
+
+class ImageAnalysisItem(CamelModel):
+    figure_plan_id: str
+    figure_no: str
+    title: str
+    section_key: str | None = None
+    assets: list[FigurePlanAssetDetail] = Field(default_factory=list)
+    latest_analysis: AnalysisRunSummary | None = None
+
+
+class ImageAnalysisListResponse(CamelModel):
+    items: list[ImageAnalysisItem] = Field(default_factory=list)
+    total: int
+    analyzed: int
+    pending: int
+
+
 class AnalysisRunCreateRequest(CamelModel):
     run_type: str = Field(default="default", min_length=1, max_length=100)
     config: dict[str, Any] | None = None
+
+
+class FigurePlanAnalyzeRequest(CamelModel):
+    asset_id: str = Field(min_length=1, max_length=255)
+    analysis_type: str = Field(default="comprehensive", min_length=1, max_length=50)
+
+    @field_validator("asset_id", "analysis_type")
+    @classmethod
+    def validate_text_fields(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("must not be blank")
+        return normalized
 
 
 class AnalysisRunCompleteRequest(CamelModel):
@@ -208,6 +252,7 @@ __all__ = [
     "AnalysisRunCreateAcceptedResponse",
     "AnalysisRunCreateRequest",
     "AnalysisRunDetail",
+    "AnalysisRunSummary",
     "AssetBindRequest",
     "AssetDetail",
     "AssetListItem",
@@ -216,6 +261,10 @@ __all__ = [
     "AssetUploadRequest",
     "BatchConfirmAssetQCRequest",
     "BatchConfirmAssetQCResponse",
+    "FigurePlanAnalyzeRequest",
+    "FigurePlanAssetDetail",
+    "ImageAnalysisItem",
+    "ImageAnalysisListResponse",
     "ManifestConfirmResponse",
     "ManifestCreateAcceptedResponse",
     "ManifestCreateRequest",

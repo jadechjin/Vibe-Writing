@@ -43,7 +43,10 @@ class FigurePlan(UUIDPrimaryKeyMixin, AuditMixin, Base):
     section_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     skeleton_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     brief_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    brief_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    brief_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
 
 class FigurePlanAsset(UUIDPrimaryKeyMixin, AuditMixin, Base):
@@ -73,11 +76,17 @@ class FigurePlanAsset(UUIDPrimaryKeyMixin, AuditMixin, Base):
 
 class AnalysisRun(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "analysis_runs"
+    __table_args__ = (Index("ix_analysis_runs_figure_plan_id", "figure_plan_id"),)
 
     system_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("experimental_systems.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    figure_plan_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("figure_plans.id", ondelete="SET NULL"),
+        nullable=True,
     )
     asset_id: Mapped[str | None] = mapped_column(
         String(36),
@@ -85,6 +94,12 @@ class AnalysisRun(UUIDPrimaryKeyMixin, AuditMixin, Base):
         nullable=True,
     )
     run_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    analysis_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="comprehensive",
+        server_default=text("'comprehensive'"),
+    )
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
