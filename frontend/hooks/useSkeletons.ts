@@ -39,6 +39,21 @@ export type SkeletonConfirmResponse = {
 export type SkeletonGenerateInput = {
   sourceAssetIds?: string[]
   userIntent?: string
+  provider?: "claude" | "codex" | "gemini"
+  customPrompt?: string | null
+}
+
+export type BuildPromptInput = {
+  sourceAssetIds?: string[]
+  userIntent?: string
+  provider?: "claude" | "codex" | "gemini"
+}
+
+export type BuildPromptResult = {
+  prompt: string
+  provider: string
+  fileDir: string
+  fileList: string[]
 }
 
 export type SkeletonReviseInput = {
@@ -113,12 +128,37 @@ export function useGenerateSkeleton(systemId: string) {
         body: JSON.stringify({
           source_asset_ids: input.sourceAssetIds ?? [],
           user_intent: input.userIntent ?? "",
+          provider: input.provider ?? "claude",
+          custom_prompt: input.customPrompt ?? null,
         }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: skeletonKeys.list(systemId) })
       queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
     },
+  })
+}
+
+function normalizeBuildPromptResult(raw: Record<string, unknown>): BuildPromptResult {
+  return {
+    prompt: (raw.prompt ?? "") as string,
+    provider: (raw.provider ?? "") as string,
+    fileDir: (raw.file_dir ?? raw.fileDir ?? "") as string,
+    fileList: (raw.file_list ?? raw.fileList ?? []) as string[],
+  }
+}
+
+export function useBuildPrompt(systemId: string) {
+  return useMutation({
+    mutationFn: (input: BuildPromptInput = {}) =>
+      apiRequest<Record<string, unknown>>(`/systems/${systemId}/skeletons/build-prompt`, {
+        method: "POST",
+        body: JSON.stringify({
+          source_asset_ids: input.sourceAssetIds ?? [],
+          user_intent: input.userIntent ?? "",
+          provider: input.provider ?? "claude",
+        }),
+      }).then(normalizeBuildPromptResult),
   })
 }
 
@@ -153,9 +193,12 @@ export function usePatchSkeleton(systemId: string) {
           change_summary: input.changeSummary,
         }),
       }),
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(
+        skeletonKeys.detail(variables.skeletonId),
+        normalizeSkeletonDetail(data),
+      )
       queryClient.invalidateQueries({ queryKey: skeletonKeys.list(systemId) })
-      queryClient.invalidateQueries({ queryKey: skeletonKeys.detail(variables.skeletonId) })
     },
   })
 }
@@ -171,6 +214,20 @@ export function useConfirmSkeleton(systemId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: skeletonKeys.list(systemId) })
       queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
+    },
+  })
+}
+
+export function useDeleteSkeleton(systemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (skeletonId: string) =>
+      apiRequest<void>(`/skeletons/${skeletonId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: skeletonKeys.list(systemId) })
     },
   })
 }

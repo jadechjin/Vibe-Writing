@@ -12,13 +12,14 @@ from app.persistence.models.draft import Outline, OutlineAssetBinding, SectionDr
 from app.persistence.models.evidence import AnalysisRun, Claim, ClaimEvidenceLink, FigurePlan
 from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.project import Project
+from app.persistence.models.skeleton import StructureSkeleton
 from app.persistence.models.system import ExperimentalSystem, SystemSection
-
 
 ALL_GATE_TABLES = [
     Project.__table__,
     ExperimentalSystem.__table__,
     SystemSection.__table__,
+    StructureSkeleton.__table__,
     Asset.__table__,
     AssetMetadata.__table__,
     AssetManifest.__table__,
@@ -48,7 +49,9 @@ def session() -> Session:
         yield db_session
 
 
-def _create_system(session: Session, *, status: SystemState = SystemState.DRAFT) -> ExperimentalSystem:
+def _create_system(
+    session: Session, *, status: SystemState = SystemState.DRAFT
+) -> ExperimentalSystem:
     project = Project(name="Thesis MVP", owner_id="owner-1")
     session.add(project)
     session.flush()
@@ -85,12 +88,14 @@ def test_resolve_active_gate_maps_fixed_gate_sequence(
     status: SystemState,
     expected_gate: GateKey,
 ) -> None:
-    system = ExperimentalSystem(project_id="project-1", system_no=1, title="System 1", status=status.value)
+    system = ExperimentalSystem(
+        project_id="project-1", system_no=1, title="System 1", status=status.value
+    )
 
     assert resolve_active_gate(system) == expected_gate
 
 
-def test_review_gate_returns_structured_blocker_for_incomplete_system_definition(
+def test_review_gate_returns_structured_blocker_for_missing_confirmed_skeleton(
     session: Session,
 ) -> None:
     system = _create_system(session, status=SystemState.DRAFT)
@@ -103,28 +108,24 @@ def test_review_gate_returns_structured_blocker_for_incomplete_system_definition
     assert len(review.blockers) == 1
 
     blocker = review.blockers[0]
-    assert blocker.code == "system_definition_incomplete"
+    assert blocker.code == "skeleton_not_confirmed"
     assert blocker.gate == GateKey.G0
     assert blocker.current_state == SystemState.DRAFT
     assert blocker.required_checks == [GateRequirementKey.SYSTEM_DEFINED]
-    assert blocker.details["missing_fields"] == [
-        "research_goal",
-        "samples_subjects",
-        "variables_controls",
-        "output_metrics",
-        "methods_summary",
-        "system_card_json",
-    ]
+    assert blocker.details == {}
 
 
-def test_review_gate_passes_when_system_definition_is_complete(session: Session) -> None:
+def test_review_gate_passes_when_confirmed_skeleton_exists(session: Session) -> None:
     system = _create_system(session, status=SystemState.DRAFT)
-    system.research_goal = "Validate the workflow"
-    system.samples_subjects = "Mice cohort"
-    system.variables_controls = "Treatment vs control"
-    system.output_metrics = "Signal intensity"
-    system.methods_summary = "Microscopy and analysis"
-    system.system_card_json = {"confirmed": True}
+    session.add(
+        StructureSkeleton(
+            system_id=system.id,
+            version=1,
+            skeleton_json={"nodes": []},
+            source_asset_ids=[],
+            status="confirmed",
+        )
+    )
     session.flush()
 
     review = review_gate(session, system)
@@ -187,9 +188,13 @@ def test_review_gate_g2_returns_blockers_for_missing_assets_and_analysis(session
     }
 
     blockers_by_code = {blocker.code: blocker for blocker in review.blockers}
-    assert blockers_by_code["data_assets_missing"].required_checks == [GateRequirementKey.DATA_UPLOADED]
+    assert blockers_by_code["data_assets_missing"].required_checks == [
+        GateRequirementKey.DATA_UPLOADED
+    ]
     assert blockers_by_code["data_assets_missing"].details["asset_count"] == 0
-    assert blockers_by_code["analysis_not_ready"].required_checks == [GateRequirementKey.ANALYSIS_READY]
+    assert blockers_by_code["analysis_not_ready"].required_checks == [
+        GateRequirementKey.ANALYSIS_READY
+    ]
     assert blockers_by_code["analysis_not_ready"].details["succeeded_run_count"] == 0
 
 
@@ -337,7 +342,9 @@ def test_review_gate_g3_requires_manifest_and_confirmed_asset_metadata(session: 
     }
 
 
-def test_review_gate_g4_requires_approved_claim_links_and_outline_bindings(session: Session) -> None:
+def test_review_gate_g4_requires_approved_claim_links_and_outline_bindings(
+    session: Session,
+) -> None:
     system = _create_system(session, status=SystemState.ASSETS_CONFIRMED)
     asset = Asset(
         project_id=system.project_id,
@@ -386,7 +393,9 @@ def test_review_gate_g4_requires_approved_claim_links_and_outline_bindings(sessi
         "approved_claim_count": 0,
         "claims_missing_evidence": [],
     }
-    assert blockers_by_code["outline_not_ready"].required_checks == [GateRequirementKey.OUTLINE_READY]
+    assert blockers_by_code["outline_not_ready"].required_checks == [
+        GateRequirementKey.OUTLINE_READY
+    ]
     assert blockers_by_code["outline_not_ready"].details == {
         "outline_status": "draft",
         "outline_version": 1,
@@ -428,7 +437,9 @@ def test_review_gate_g4_blocks_approved_claims_with_invalid_sections(session: Se
     )
     session.add(outline)
     session.flush()
-    session.add(OutlineAssetBinding(outline_id=outline.id, asset_id=asset.id, section_key="results"))
+    session.add(
+        OutlineAssetBinding(outline_id=outline.id, asset_id=asset.id, section_key="results")
+    )
     session.flush()
 
     review = review_gate(session, system)
@@ -450,7 +461,9 @@ def test_review_gate_g5_requires_latest_draft_for_every_section_to_be_approved(
     system = _create_system(session, status=SystemState.OUTLINE_READY)
     session.add_all(
         [
-            SystemSection(system_id=system.id, section_key="intro", title="Introduction", order_no=1),
+            SystemSection(
+                system_id=system.id, section_key="intro", title="Introduction", order_no=1
+            ),
             SystemSection(system_id=system.id, section_key="results", title="Results", order_no=2),
         ]
     )
@@ -577,7 +590,9 @@ def test_review_gate_g4_uses_latest_claim_version_for_approval(session: Session)
     )
     session.add(outline)
     session.flush()
-    session.add(OutlineAssetBinding(outline_id=outline.id, asset_id=asset.id, section_key="results"))
+    session.add(
+        OutlineAssetBinding(outline_id=outline.id, asset_id=asset.id, section_key="results")
+    )
     session.flush()
 
     review = review_gate(session, system)

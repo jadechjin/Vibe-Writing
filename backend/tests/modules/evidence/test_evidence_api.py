@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 import time
@@ -23,6 +24,7 @@ from app.persistence.models import (
     ClaimEvidenceLink,
     ExperimentalSystem,
     FigurePlan,
+    FigurePlanAsset,
     Project,
     ProjectMember,
     ProjectMemberRole,
@@ -30,16 +32,19 @@ from app.persistence.models import (
     WorkflowEvent,
     WorkflowInstance,
 )
+from app.persistence.models.skeleton import StructureSkeleton
 
 ALL_TABLES = [
     Project.__table__,
     ProjectMember.__table__,
     ExperimentalSystem.__table__,
     SystemSection.__table__,
+    StructureSkeleton.__table__,
     Asset.__table__,
     AssetMetadata.__table__,
     AnalysisRun.__table__,
     FigurePlan.__table__,
+    FigurePlanAsset.__table__,
     Claim.__table__,
     ClaimEvidenceLink.__table__,
     WorkflowInstance.__table__,
@@ -118,6 +123,31 @@ def _create_system(
     return system
 
 
+def _create_confirmed_skeleton(
+    session: Session,
+    *,
+    system_id: str,
+    version: int = 1,
+    figure_framework: list | None = None,
+) -> StructureSkeleton:
+    skeleton = StructureSkeleton(
+        system_id=system_id,
+        version=version,
+        skeleton_json={
+            "sections": [{"key": "sec1", "title": "Section 1"}],
+            "figure_framework": figure_framework or [
+                {"figure_id": "fig1", "title": "Figure 1", "type": "chart", "purpose": "Test", "related_sections": ["sec1"]},
+            ],
+        },
+        source_asset_ids=[],
+        status="confirmed",
+        confirmed_at=datetime.now(UTC),
+    )
+    session.add(skeleton)
+    session.flush()
+    return skeleton
+
+
 def _wait_for_figure_plan_completion(engine, workflow_id: str, system_id: str, *, expected_plan_count: int) -> None:
     for _ in range(50):
         with Session(engine) as session:
@@ -193,12 +223,34 @@ def _create_asset_with_analysis(
     return asset
 
 
+def _create_figure_plan(
+    session: Session,
+    *,
+    system_id: str,
+    figure_no: str = "fig1",
+    title: str = "Figure 1",
+    claim_text: str = "test",
+    status: str = "pending",
+) -> FigurePlan:
+    plan = FigurePlan(
+        system_id=system_id,
+        figure_no=figure_no,
+        title=title,
+        claim_text=claim_text,
+        status=status,
+    )
+    session.add(plan)
+    session.flush()
+    return plan
+
+
 
 
 def test_generate_figure_plan_returns_accepted(client: TestClient, engine) -> None:
     with Session(engine) as session:
         project = _create_project(session)
         system = _create_system(session, project_id=project.id)
+        _create_confirmed_skeleton(session, system_id=system.id)
         session.commit()
         system_id = system.id
 
@@ -240,9 +292,11 @@ def test_generate_figure_plan_returns_accepted(client: TestClient, engine) -> No
 
     assert len(plans) == 1
     assert plans[0].system_id == system_id
-    assert plans[0].figure_no == "1"
+    assert plans[0].figure_no == "fig1"
     assert plans[0].version == 1
-    assert plans[0].status == "draft"
+    assert plans[0].status == "pending"
+    assert plans[0].section_key == "sec1"
+    assert plans[0].skeleton_version == 1
     assert workflow.status == TaskStatus.SUCCEEDED.value
     assert [event.event_type for event in events] == [EventType.TASK_CREATED.value, EventType.TASK_SUCCEEDED.value]
 
@@ -251,7 +305,7 @@ def test_generate_figure_plan_returns_accepted(client: TestClient, engine) -> No
     list_body = list_response.json()
     assert list_body["success"] is True
     assert len(list_body["data"]) == 1
-    assert list_body["data"][0]["figureNo"] == "1"
+    assert list_body["data"][0]["figureNo"] == "fig1"
     assert list_body["data"][0]["version"] == 1
 
 
@@ -316,6 +370,296 @@ def test_confirm_figure_plan_rejects_invalid_status(client: TestClient, engine) 
     response = client.post(f"/api/figure-plans/{plan_id}/confirm", json={"status": "approved"})
 
     assert response.status_code == 422
+
+
+def test_patch_figure_plan_updates_fields(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        session.add(
+            SystemSection(system_id=system.id, section_key="results", title="Results", order_no=1)
+        )
+        plan = FigurePlan(
+            system_id=system.id,
+            figure_no="fig1",
+            title="Original title",
+            claim_text="Original claim",
+            status="pending",
+            data_needed_json=[{"kind": "raw"}],
+            method_json={"mode": "initial"},
+            acceptance_criteria_json=[{"type": "status", "value": "confirmed"}],
+        )
+        session.add(plan)
+        session.commit()
+        plan_id = plan.id
+
+    response = client.patch(
+        f"/api/figure-plans/{plan_id}",
+        json={
+            "figureNo": "fig1-updated",
+            "title": "Updated title",
+            "claimText": "Updated claim",
+            "sectionKey": "results",
+            "briefText": "Updated brief",
+            "dataNeededJson": [{"kind": "processed"}],
+            "methodJson": {"mode": "manual"},
+            "acceptanceCriteriaJson": [{"type": "note", "value": "ok"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["figureNo"] == "fig1-updated"
+    assert body["data"]["title"] == "Updated title"
+    assert body["data"]["claimText"] == "Updated claim"
+    assert body["data"]["sectionKey"] == "results"
+    assert body["data"]["briefText"] == "Updated brief"
+    assert body["data"]["dataNeededJson"] == [{"kind": "processed"}]
+    assert body["data"]["methodJson"] == {"mode": "manual"}
+    assert body["data"]["acceptanceCriteriaJson"] == [{"type": "note", "value": "ok"}]
+
+    with Session(engine) as session:
+        updated = session.get(FigurePlan, plan_id)
+
+    assert updated is not None
+    assert updated.figure_no == "fig1-updated"
+    assert updated.title == "Updated title"
+    assert updated.claim_text == "Updated claim"
+    assert updated.section_key == "results"
+    assert updated.brief_text == "Updated brief"
+    assert updated.data_needed_json == [{"kind": "processed"}]
+    assert updated.method_json == {"mode": "manual"}
+    assert updated.acceptance_criteria_json == [{"type": "note", "value": "ok"}]
+
+
+def test_patch_figure_plan_rejects_invalid_section_key(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        session.add(
+            SystemSection(system_id=system.id, section_key="results", title="Results", order_no=1)
+        )
+        plan = FigurePlan(
+            system_id=system.id,
+            figure_no="fig1",
+            title="Fig 1",
+            claim_text="test",
+            status="pending",
+        )
+        session.add(plan)
+        session.commit()
+        plan_id = plan.id
+
+    response = client.patch(
+        f"/api/figure-plans/{plan_id}",
+        json={"sectionKey": "discussion"},
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"] == "Figure plan section_key is not defined for this system"
+
+
+def test_delete_figure_plan_returns_204(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        plan = FigurePlan(
+            system_id=system.id,
+            figure_no="fig1",
+            title="Fig 1",
+            claim_text="test",
+            status="pending",
+        )
+        session.add(plan)
+        session.commit()
+        plan_id = plan.id
+
+    response = client.delete(f"/api/figure-plans/{plan_id}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    with Session(engine) as session:
+        deleted = session.get(FigurePlan, plan_id)
+
+    assert deleted is None
+
+
+def test_delete_figure_plan_returns_404_for_missing_plan(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        _create_system(session, project_id=project.id)
+        session.commit()
+
+    response = client.delete("/api/figure-plans/missing-plan-id")
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"] == "Figure plan not found"
+
+
+# ---------------------------------------------------------------------------
+# FigurePlan assets
+# ---------------------------------------------------------------------------
+
+
+def test_upload_figure_plan_asset_creates_binding_and_asset_metadata(
+    client: TestClient,
+    engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_upload = lambda *_args, **_kwargs: "uploads/plan-asset.png"
+    monkeypatch.setattr("app.modules.evidence.service.upload_fileobj", fake_upload, raising=False)
+    monkeypatch.setattr("app.modules.assets.service.upload_fileobj", fake_upload, raising=False)
+    monkeypatch.setattr(
+        "app.modules.evidence.service.generate_presigned_url",
+        lambda storage_key, expires=3600: f"https://example.test/{storage_key}?expires={expires}",
+    )
+
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        plan = _create_figure_plan(session, system_id=system.id)
+        session.commit()
+        plan_id = plan.id
+
+    response = client.post(
+        f"/api/figure-plans/{plan_id}/assets",
+        data={"role": "source_image"},
+        files={"file": ("microscopy.png", BytesIO(b"binary-image"), "image/png")},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["figurePlanId"] == plan_id
+    assert body["data"]["role"] == "source_image"
+    assert body["data"]["position"] == 0
+    assert body["data"]["fileName"] == "microscopy.png"
+    assert body["data"]["mimeType"] == "image/png"
+    assert body["data"]["previewUrl"] == "https://example.test/uploads/plan-asset.png?expires=3600"
+
+    with Session(engine) as session:
+        binding = session.scalars(select(FigurePlanAsset)).one()
+        asset = session.scalars(select(Asset)).one()
+        metadata = session.scalars(select(AssetMetadata)).one()
+
+    assert binding.figure_plan_id == plan_id
+    assert binding.asset_id == asset.id
+    assert asset.asset_type == "image"
+    assert asset.storage_key == "uploads/plan-asset.png"
+    assert metadata.asset_id == asset.id
+    assert metadata.qc_status == "pending"
+
+
+def test_upload_figure_plan_asset_rejects_non_image_file(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        plan = _create_figure_plan(session, system_id=system.id)
+        session.commit()
+        plan_id = plan.id
+
+    response = client.post(
+        f"/api/figure-plans/{plan_id}/assets",
+        data={"role": "source_image"},
+        files={"file": ("notes.txt", BytesIO(b"not-an-image"), "text/plain")},
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"] == "Only image files are allowed"
+
+
+def test_upload_figure_plan_asset_rejects_file_larger_than_10mb(client: TestClient, engine) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        plan = _create_figure_plan(session, system_id=system.id)
+        session.commit()
+        plan_id = plan.id
+
+    response = client.post(
+        f"/api/figure-plans/{plan_id}/assets",
+        data={"role": "source_image"},
+        files={"file": ("too-large.png", BytesIO(b"x" * (10 * 1024 * 1024 + 1)), "image/png")},
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"] == "File size exceeds 10MB limit"
+
+
+def test_delete_figure_plan_asset_requires_matching_plan(
+    client: TestClient,
+    engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.modules.evidence.service.generate_presigned_url", lambda *_args, **_kwargs: "https://example.test/preview")
+
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(session, project_id=project.id)
+        other_system = ExperimentalSystem(
+            project_id=project.id,
+            system_no=2,
+            title="Other system",
+            status=SystemState.DRAFT.value,
+        )
+        session.add(other_system)
+        session.flush()
+        owner_plan = _create_figure_plan(session, system_id=system.id, figure_no="fig1")
+        foreign_plan = _create_figure_plan(session, system_id=other_system.id, figure_no="fig2")
+        asset = Asset(
+            project_id=project.id,
+            system_id=system.id,
+            asset_type="image",
+            file_name="asset.png",
+            storage_key="uploads/asset.png",
+            uploaded_by="owner-1",
+        )
+        session.add(asset)
+        session.flush()
+        binding = FigurePlanAsset(
+            figure_plan_id=owner_plan.id,
+            asset_id=asset.id,
+            role="source_image",
+            position=0,
+        )
+        session.add(binding)
+        session.commit()
+        owner_plan_id = owner_plan.id
+        foreign_plan_id = foreign_plan.id
+        binding_id = binding.id
+
+    wrong_plan_response = client.delete(f"/api/figure-plans/{foreign_plan_id}/assets/{binding_id}")
+
+    assert wrong_plan_response.status_code == 403
+    wrong_plan_body = wrong_plan_response.json()
+    assert wrong_plan_body["success"] is False
+    assert wrong_plan_body["error"] == "Binding does not belong to this plan"
+
+    with Session(engine) as session:
+        still_exists = session.get(FigurePlanAsset, binding_id)
+
+    assert still_exists is not None
+    assert still_exists.figure_plan_id == owner_plan_id
+
+    delete_response = client.delete(f"/api/figure-plans/{owner_plan_id}/assets/{binding_id}")
+
+    assert delete_response.status_code == 204
+    assert delete_response.content == b""
+
+    with Session(engine) as session:
+        deleted = session.get(FigurePlanAsset, binding_id)
+
+    assert deleted is None
 
 
 # ---------------------------------------------------------------------------

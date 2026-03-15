@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.common.enums import GateKey, SystemState, TaskStatus
+from app.common.enums import GateKey, SystemState
 from app.common.schemas import Blocker, JobHandle
 from app.modules.tasks.schemas import WorkflowSnapshot
 
@@ -21,12 +20,6 @@ class CamelModel(BaseModel):
 
 class SystemCreateRequest(CamelModel):
     title: str = Field(min_length=1, max_length=255)
-    research_goal: str | None = Field(default=None, max_length=5000)
-    samples_subjects: str | None = Field(default=None, max_length=5000)
-    variables_controls: str | None = Field(default=None, max_length=5000)
-    output_metrics: str | None = Field(default=None, max_length=5000)
-    methods_summary: str | None = Field(default=None, max_length=5000)
-    system_card_json: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("title")
     @classmethod
@@ -39,12 +32,6 @@ class SystemCreateRequest(CamelModel):
 
 class SystemUpdateRequest(CamelModel):
     title: str | None = Field(default=None, max_length=255)
-    research_goal: str | None = Field(default=None, max_length=5000)
-    samples_subjects: str | None = Field(default=None, max_length=5000)
-    variables_controls: str | None = Field(default=None, max_length=5000)
-    output_metrics: str | None = Field(default=None, max_length=5000)
-    methods_summary: str | None = Field(default=None, max_length=5000)
-    system_card_json: dict[str, Any] | None = None
 
     @field_validator("title")
     @classmethod
@@ -81,12 +68,6 @@ class SystemDetail(CamelModel):
     system_no: int
     title: str
     status: str
-    research_goal: str | None = None
-    samples_subjects: str | None = None
-    variables_controls: str | None = None
-    output_metrics: str | None = None
-    methods_summary: str | None = None
-    system_card_json: dict[str, Any] = Field(default_factory=dict)
     sections: list[SystemSectionSummary] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

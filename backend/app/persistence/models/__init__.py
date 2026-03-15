@@ -8,6 +8,8 @@ from app.persistence.models.evidence import (
     ClaimEvidenceLink,
     FigurePlan,
     FigurePlanAsset,
+    FigurePlanChatMessage,
+    FigurePlanChatSession,
 )
 from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.project import Project, ProjectMember, ProjectMemberRole, ProjectStatus
@@ -26,6 +28,8 @@ __all__ = [
     "ExperimentalSystem",
     "FigurePlan",
     "FigurePlanAsset",
+    "FigurePlanChatMessage",
+    "FigurePlanChatSession",
     "Outline",
     "OutlineAssetBinding",
     "Project",

@@ -98,25 +98,6 @@ const eventTimeStyle: CSSProperties = {
   whiteSpace: "nowrap",
 }
 
-const blockerCardStyle: CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: "12px",
-  border: "1px solid rgba(248, 113, 113, 0.2)",
-  background: "rgba(127, 29, 29, 0.1)",
-}
-
-const blockerCodeStyle: CSSProperties = {
-  fontSize: "12px",
-  fontWeight: 600,
-  color: "#fca5a5",
-}
-
-const blockerMsgStyle: CSSProperties = {
-  fontSize: "13px",
-  color: "#fecaca",
-  marginTop: "2px",
-}
-
 // ---- Helpers ----
 
 function formatWorkflowStatus(status: string): string {
@@ -186,21 +167,6 @@ export function WorkflowPanel({
             <span style={eventTimeStyle}>
               {new Date(latestEvent.createdAt).toLocaleTimeString()}
             </span>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Latest blockers */}
-      {latestBlockers.length > 0 ? (
-        <div>
-          <div style={sectionLabelStyle}>阻塞项</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {latestBlockers.map((blocker, idx) => (
-              <div key={`${blocker.code}-${idx}`} style={blockerCardStyle}>
-                <div style={blockerCodeStyle}>{blocker.code}</div>
-                <div style={blockerMsgStyle}>{blocker.message}</div>
-              </div>
-            ))}
           </div>
         </div>
       ) : null}

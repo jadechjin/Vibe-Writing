@@ -40,6 +40,10 @@ class FigurePlan(UUIDPrimaryKeyMixin, AuditMixin, Base):
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    section_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    skeleton_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    brief_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brief_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FigurePlanAsset(UUIDPrimaryKeyMixin, AuditMixin, Base):
@@ -170,10 +174,57 @@ class ClaimEvidenceLink(UUIDPrimaryKeyMixin, AuditMixin, Base):
     )
 
 
+class FigurePlanChatSession(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "figure_plan_chat_sessions"
+    __table_args__ = (
+        UniqueConstraint(
+            "figure_plan_id",
+            "provider",
+            name="uq_figure_plan_chat_sessions_plan_provider",
+        ),
+    )
+
+    figure_plan_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("figure_plans.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    provider_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    work_dir: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class FigurePlanChatMessage(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "figure_plan_chat_messages"
+    __table_args__ = (
+        Index(
+            "ix_figure_plan_chat_messages_session_turn",
+            "session_id",
+            "turn_index",
+            unique=True,
+        ),
+    )
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("figure_plan_chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="completed")
+    turn_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 __all__ = [
     "AnalysisRun",
     "Claim",
     "ClaimEvidenceLink",
     "FigurePlan",
     "FigurePlanAsset",
+    "FigurePlanChatMessage",
+    "FigurePlanChatSession",
 ]

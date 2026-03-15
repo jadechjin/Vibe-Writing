@@ -11,12 +11,6 @@ export function buildSystemDetail(overrides: Partial<SystemDetail> = {}): System
     systemNo: 1,
     title: "Test System",
     status: "active",
-    researchGoal: null,
-    samplesSubjects: null,
-    variablesControls: null,
-    outputMetrics: null,
-    methodsSummary: null,
-    systemCardJson: {},
     sections: [
       { id: "section-intro", sectionKey: "intro", title: "Introduction", orderNo: 1 },
       { id: "section-methods", sectionKey: "methods", title: "Methods", orderNo: 2 },

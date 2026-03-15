@@ -64,32 +64,6 @@ def review_gate(
 
 def check_system_defined(_session: Session, system: ExperimentalSystem) -> list[Blocker]:
     blockers: list[Blocker] = []
-    missing_fields: list[str] = []
-
-    if not _has_text(system.research_goal):
-        missing_fields.append("research_goal")
-    if not _has_text(system.samples_subjects):
-        missing_fields.append("samples_subjects")
-    if not _has_text(system.variables_controls):
-        missing_fields.append("variables_controls")
-    if not _has_text(system.output_metrics):
-        missing_fields.append("output_metrics")
-    if not _has_text(system.methods_summary):
-        missing_fields.append("methods_summary")
-    if not system.system_card_json:
-        missing_fields.append("system_card_json")
-
-    if missing_fields:
-        blockers.append(
-            _build_blocker(
-                code="system_definition_incomplete",
-                message="System definition is incomplete.",
-                gate=GateKey.G0,
-                current_state=system.status,
-                required_checks=[GateRequirementKey.SYSTEM_DEFINED],
-                details={"missing_fields": missing_fields},
-            )
-        )
 
     has_confirmed = _session.scalar(
         select(StructureSkeleton.id)
@@ -112,9 +86,7 @@ def check_system_defined(_session: Session, system: ExperimentalSystem) -> list[
 
 
 def check_figure_plan_ready(session: Session, system: ExperimentalSystem) -> list[Blocker]:
-    plans = session.scalars(
-        select(FigurePlan).where(FigurePlan.system_id == system.id)
-    ).all()
+    plans = session.scalars(select(FigurePlan).where(FigurePlan.system_id == system.id)).all()
     latest_plans = _latest_by_version(plans, key=lambda item: item.figure_no)
     unready_plans = [
         {
@@ -189,9 +161,11 @@ def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list
 
     assets = session.scalars(select(Asset).where(Asset.system_id == system.id)).all()
     asset_ids = [asset.id for asset in assets]
-    metadata_entries = session.scalars(
-        select(AssetMetadata).where(AssetMetadata.asset_id.in_(asset_ids))
-    ).all() if asset_ids else []
+    metadata_entries = (
+        session.scalars(select(AssetMetadata).where(AssetMetadata.asset_id.in_(asset_ids))).all()
+        if asset_ids
+        else []
+    )
     metadata_by_asset_id = {entry.asset_id: entry for entry in metadata_entries}
 
     missing_metadata_asset_ids = [
@@ -205,7 +179,11 @@ def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list
         if not _is_confirmed_status(getattr(metadata_by_asset_id.get(asset.id), "qc_status", None))
     ]
 
-    if _is_confirmed_status(manifest_status) and not missing_metadata_asset_ids and not pending_qc_asset_ids:
+    if (
+        _is_confirmed_status(manifest_status)
+        and not missing_metadata_asset_ids
+        and not pending_qc_asset_ids
+    ):
         return []
 
     return [
@@ -253,17 +231,19 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
         )
 
     approved_claim_ids = [claim.id for claim in approved_claims]
-    linked_claim_ids = set(
-        session.scalars(
-            select(ClaimEvidenceLink.claim_record_id).where(
-                ClaimEvidenceLink.claim_record_id.in_(approved_claim_ids)
-            )
-        ).all()
-    ) if approved_claim_ids else set()
+    linked_claim_ids = (
+        set(
+            session.scalars(
+                select(ClaimEvidenceLink.claim_record_id).where(
+                    ClaimEvidenceLink.claim_record_id.in_(approved_claim_ids)
+                )
+            ).all()
+        )
+        if approved_claim_ids
+        else set()
+    )
     claims_missing_evidence = [
-        claim.claim_id
-        for claim in approved_claims
-        if claim.id not in linked_claim_ids
+        claim.claim_id for claim in approved_claims if claim.id not in linked_claim_ids
     ]
 
     if not approved_claims or claims_missing_evidence:
@@ -287,7 +267,9 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
     if latest_outline is not None:
         binding_count = len(
             session.scalars(
-                select(OutlineAssetBinding).where(OutlineAssetBinding.outline_id == latest_outline.id)
+                select(OutlineAssetBinding).where(
+                    OutlineAssetBinding.outline_id == latest_outline.id
+                )
             ).all()
         )
 
@@ -306,7 +288,9 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
                 required_checks=[GateRequirementKey.OUTLINE_READY],
                 details={
                     "outline_status": latest_outline.status if latest_outline is not None else None,
-                    "outline_version": latest_outline.version if latest_outline is not None else None,
+                    "outline_version": latest_outline.version
+                    if latest_outline is not None
+                    else None,
                     "binding_count": binding_count,
                 },
             )
@@ -321,11 +305,10 @@ def check_chapter_approved(session: Session, system: ExperimentalSystem) -> list
         .where(SystemSection.system_id == system.id)
         .order_by(SystemSection.order_no, SystemSection.section_key)
     ).all()
-    drafts = session.scalars(
-        select(SectionDraft).where(SectionDraft.system_id == system.id)
-    ).all()
+    drafts = session.scalars(select(SectionDraft).where(SectionDraft.system_id == system.id)).all()
     latest_drafts_by_section = {
-        draft.section_key: draft for draft in _latest_by_version(drafts, key=lambda item: item.section_key)
+        draft.section_key: draft
+        for draft in _latest_by_version(drafts, key=lambda item: item.section_key)
     }
 
     approved_sections: list[str] = []

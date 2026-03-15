@@ -14,7 +14,6 @@ import type {
   WorkflowEventRecord,
 } from "../../hooks/useProjectStatus"
 import type { SystemDetail } from "../../hooks/useProjects"
-import type { SystemUpdateInput } from "../../hooks/useSystem"
 
 // ---- Props ----
 
@@ -28,8 +27,6 @@ export type GatePanelProps = Readonly<{
   systemName?: string
   projectTitle?: string
   systemDetail?: SystemDetail | null
-  onUpdateSystem?: (data: SystemUpdateInput) => void
-  isUpdating?: boolean
   systemId?: string
 }>
 
@@ -67,16 +64,16 @@ function resolveWorkbenchContent(
     case "G0":
       return {
         title: "体系定义",
-        description: "填写并确认实验体系定义，包括研究目标、技术路线与预期产出。确认后点击推进至 G1。",
+        description: "整理模板文献并确认结构骨架。完成后点击推进至 G1。",
         actionLabel: "推进门禁",
-        actionHint: "确认体系定义后，系统将评审 G0 并尝试推进。",
+        actionHint: "结构骨架确认后，系统将评审 G0 并尝试推进。",
       }
     case "G1":
       return {
         title: "图表规划",
-        description: "等待系统生成图表规划。图表规划将规划本章节全部图表的类型、数据需求与预期呈现。",
-        actionLabel: "等待图表规划生成",
-        actionHint: "图表规划确认后可推进至数据上传阶段。",
+        description: "基于骨架结构规划全部图表。按章节浏览图表任务，编辑简述并确认后推进至数据上传阶段。",
+        actionLabel: "推进门禁",
+        actionHint: "全部图表规划确认后可推进至数据上传阶段。",
       }
     case "G2":
       return resolveG2Workbench(currentState)
@@ -276,8 +273,6 @@ export function GatePanel({
   systemName,
   projectTitle,
   systemDetail,
-  onUpdateSystem,
-  isUpdating,
   systemId,
 }: GatePanelProps) {
   const effectiveGateKey = selectedGate ?? gateKey
@@ -287,7 +282,7 @@ export function GatePanel({
   const isRetroactive = selectedGate != null && selectedGate !== gateKey && gateVisualState === "passed"
   const isLockedView = gateVisualState === "locked"
 
-  const showG0Form = effectiveGateKey === "G0" && (gateVisualState === "active" || gateVisualState === "passed")
+  const showG0Workbench = effectiveGateKey === "G0" && (gateVisualState === "active" || gateVisualState === "passed")
   const g0ReadOnly = false // passed gates are editable in retroactive mode
 
   const systemIdStr = systemId ?? snapshot?.systemId ?? ""
@@ -308,7 +303,7 @@ export function GatePanel({
       )
     }
 
-    if (effectiveGateKey === "G0") return null // handled by SystemDefinitionForm / G0Workbench
+    if (effectiveGateKey === "G0") return null // handled by G0Workbench
 
     const panelProps = { snapshot, blockers: latestBlockers, systemId: systemIdStr, systemDetail: systemDetail ?? null }
 
@@ -358,14 +353,10 @@ export function GatePanel({
       ) : null}
 
       {/* G0 workbench, gate panel, or workbench empty state */}
-      {showG0Form && onUpdateSystem ? (
+      {showG0Workbench ? (
         <G0Workbench
           systemId={systemIdStr}
-          systemDetail={systemDetail ?? null}
-          blockers={g0ReadOnly ? [] : latestBlockers}
-          onSave={onUpdateSystem}
           isReadOnly={g0ReadOnly}
-          isUpdating={isUpdating}
         />
       ) : gatePanel ? (
         gatePanel

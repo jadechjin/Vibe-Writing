@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from inspect import isawaitable
-from typing import Any, TypeVar
+from io import SEEK_END
+from typing import Any, BinaryIO, TypeVar
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -12,22 +16,45 @@ from sqlalchemy.orm import Session
 from app.common.enums import EventType, GateKey, TaskStatus
 from app.common.errors import ErrorCode
 from app.common.events import TaskEvent
+from app.common.storage import generate_presigned_url
 from app.core.exceptions import AppException
+from app.modules.assets.service import create_asset_from_upload
 from app.modules.evidence import repository
+from app.modules.evidence.chat_provider import (
+    ChatProvider as ChatCliProvider,
+)
+from app.modules.evidence.chat_provider import (
+    invoke_chat_stream,
+)
 from app.modules.evidence.schemas import (
-    BatchApproveClaimsRequest,
     BatchApproveClaimsResponse,
+    ChatMessageDetail,
     ClaimApproveRequest,
     ClaimDetail,
     ClaimEvidenceLinkCreateRequest,
     ClaimEvidenceLinkDetail,
     EvidenceMatrixGenerateAcceptedResponse,
+    FigurePlanAssetDetail,
     FigurePlanConfirmRequest,
     FigurePlanDetail,
     FigurePlanGenerateAcceptedResponse,
+    FigurePlanPatchRequest,
+    FigurePlanStatusTransitionRequest,
+    FigurePlanUpdateBriefRequest,
 )
 from app.modules.tasks.service import TaskWorkflowService
-from app.persistence.models import AnalysisRun, Asset, Claim, ClaimEvidenceLink, FigurePlan, SystemSection
+from app.persistence.models import (
+    AnalysisRun,
+    Asset,
+    Claim,
+    ClaimEvidenceLink,
+    FigurePlan,
+    FigurePlanAsset,
+    FigurePlanChatMessage,
+    FigurePlanChatSession,
+    SystemSection,
+)
+from app.persistence.models.skeleton import StructureSkeleton
 from app.realtime.broadcaster import TaskBroadcaster
 from app.workflows.system_workflow import (
     WorkflowCommand,
@@ -39,7 +66,24 @@ from app.workflows.system_workflow import (
 SessionLike = AsyncSession | Session
 T = TypeVar("T")
 
+logger = logging.getLogger(__name__)
+
 EVIDENCE_TASK_START_DELAY_SECONDS = 0.05
+
+
+async def _get_confirmed_skeleton(session: SessionLike, system_id: str) -> StructureSkeleton | None:
+    result = await _maybe_await(
+        session.execute(
+            select(StructureSkeleton)
+            .where(
+                StructureSkeleton.system_id == system_id,
+                StructureSkeleton.status == "confirmed",
+            )
+            .order_by(StructureSkeleton.version.desc())
+            .limit(1)
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 class _SyncTaskSessionAdapter:
@@ -169,20 +213,79 @@ async def complete_figure_plan_generation(
                 details={"system_id": system_id},
             )
 
-        figure_no = "1"
-        version = await repository.get_next_figure_plan_version(session, system.id, figure_no)
-        plan = await repository.create_figure_plan(
-            session,
-            system_id=system.id,
-            figure_no=figure_no,
-            title=f"Figure {figure_no}",
-            claim_text=f"Generated figure plan for {system.title}",
-            status="draft",
-            version=version,
-            data_needed_json=[{"assetType": "figure"}],
-            method_json={"mode": "thin_workflow"},
-            acceptance_criteria_json=[{"type": "status", "value": "confirmed"}],
-        )
+        skeleton = await _get_confirmed_skeleton(session, system_id)
+        if skeleton is None:
+            raise AppException(
+                code=ErrorCode.NOT_FOUND.value,
+                message="No confirmed skeleton found",
+                status_code=404,
+                details={"system_id": system_id},
+            )
+
+        # Idempotency: skip if this skeleton_version already has plans
+        existing_plans = await repository.list_figure_plans(session, system_id)
+        if any(p.skeleton_version == skeleton.version for p in existing_plans):
+            await append_system_workflow_event(
+                task_service,
+                WorkflowEventCommand(
+                    workflow_id=workflow_id,
+                    event_type=EventType.TASK_SUCCEEDED,
+                    message="Figure plans already exist for this skeleton version",
+                    status=TaskStatus.SUCCEEDED,
+                    from_state=system.status,
+                    to_state=system.status,
+                    current_state=system.status,
+                    current_gate=GateKey.G1.value,
+                    payload={"skeleton_version": skeleton.version, "skipped": True},
+                    context_update={"skeleton_version": skeleton.version},
+                ),
+            )
+            await _maybe_await(session.commit())
+            if broadcaster is not None:
+                await _publish_task_event(
+                    broadcaster,
+                    type=EventType.TASK_SUCCEEDED,
+                    task_id=workflow_snapshot.job_id,
+                    workflow_id=workflow_snapshot.workflow_id,
+                    project_id=workflow_snapshot.project_id,
+                    system_id=system.id,
+                    status=TaskStatus.SUCCEEDED,
+                    message="Figure plans already exist for this skeleton version",
+                    payload={"skeletonVersion": skeleton.version, "skipped": True},
+                )
+            return
+
+        figures = (skeleton.skeleton_json or {}).get("figure_framework", [])
+        if not isinstance(figures, list) or not figures:
+            figures = [{"figure_id": "fig1", "title": "Figure 1", "type": "chart"}]
+
+        created_plans: list[FigurePlan] = []
+        for idx, fig in enumerate(figures):
+            if not isinstance(fig, dict):
+                continue
+            figure_id = fig.get("figure_id", f"fig{idx + 1}")
+            version = await repository.get_next_figure_plan_version(session, system.id, figure_id)
+            related_sections = fig.get("related_sections", [])
+            section_key = (
+                related_sections[0]
+                if isinstance(related_sections, list) and related_sections
+                else None
+            )
+            plan = await repository.create_figure_plan(
+                session,
+                system_id=system.id,
+                figure_no=figure_id,
+                title=fig.get("title", "Untitled"),
+                claim_text=fig.get("purpose", ""),
+                status="pending",
+                version=version,
+                section_key=section_key,
+                skeleton_version=skeleton.version,
+                data_needed_json=[{"assetType": "figure"}],
+                method_json={"mode": "skeleton_driven"},
+                acceptance_criteria_json=[{"type": "status", "value": "confirmed"}],
+            )
+            created_plans.append(plan)
 
         await append_system_workflow_event(
             task_service,
@@ -196,15 +299,13 @@ async def complete_figure_plan_generation(
                 current_state=system.status,
                 current_gate=GateKey.G1.value,
                 payload={
-                    "figure_plan_id": plan.id,
-                    "figure_no": plan.figure_no,
-                    "figure_plan_version": plan.version,
-                    "figure_plan_status": plan.status,
+                    "figure_plan_count": len(created_plans),
+                    "skeleton_version": skeleton.version,
+                    "figure_plan_ids": [p.id for p in created_plans],
                 },
                 context_update={
-                    "figure_plan_id": plan.id,
-                    "figure_plan_version": plan.version,
-                    "figure_plan_status": plan.status,
+                    "figure_plan_count": len(created_plans),
+                    "skeleton_version": skeleton.version,
                 },
             ),
         )
@@ -221,10 +322,8 @@ async def complete_figure_plan_generation(
                 status=TaskStatus.SUCCEEDED,
                 message="Figure plan generation completed",
                 payload={
-                    "figurePlanId": plan.id,
-                    "figureNo": plan.figure_no,
-                    "figurePlanVersion": plan.version,
-                    "figurePlanStatus": plan.status,
+                    "figurePlanCount": len(created_plans),
+                    "skeletonVersion": skeleton.version,
                 },
             )
     except AppException as exc:
@@ -237,7 +336,7 @@ async def complete_figure_plan_generation(
             payload={"code": exc.code, "details": exc.details},
             broadcaster=broadcaster,
         )
-    except Exception as exc:
+    except Exception:
         await _record_generation_failure(
             session=session,
             task_service=task_service,
@@ -284,6 +383,245 @@ async def confirm_figure_plan(
     return _build_figure_plan_detail(plan)
 
 
+VALID_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    "pending": {"uploaded"},
+    "uploaded": {"analyzing"},
+    "analyzing": {"discussing"},
+    "discussing": {"draft_brief"},
+    "draft_brief": {"confirmed"},
+    "confirmed": {"delivered"},
+    "needs_review": {"pending", "uploaded", "analyzing", "discussing", "draft_brief", "confirmed"},
+}
+
+
+async def update_figure_plan_brief(
+    session: SessionLike,
+    plan_id: str,
+    payload: FigurePlanUpdateBriefRequest,
+) -> FigurePlanDetail:
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+    plan = await repository.update_figure_plan_brief(session, plan_id, payload.brief_text)
+    await _maybe_await(session.commit())
+    return _build_figure_plan_detail(plan)
+
+
+async def patch_figure_plan(
+    session: SessionLike,
+    plan_id: str,
+    payload: FigurePlanPatchRequest,
+) -> FigurePlanDetail:
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+
+    if "section_key" in payload.model_fields_set and payload.section_key is not None:
+        allowed_section_keys = {
+            section.section_key
+            for section in await repository.list_system_sections(session, plan.system_id)
+        }
+        if payload.section_key not in allowed_section_keys:
+            raise AppException(
+                code=ErrorCode.VALIDATION_ERROR.value,
+                message="Figure plan section_key is not defined for this system",
+                status_code=422,
+                details={
+                    "plan_id": plan_id,
+                    "system_id": plan.system_id,
+                    "section_key": payload.section_key,
+                },
+            )
+
+    old_figure_no = plan.figure_no
+    try:
+        plan = await repository.update_figure_plan_fields(
+            session,
+            plan,
+            payload.model_dump(exclude_unset=True),
+        )
+
+        # Sync changes back to skeleton figure_framework
+        await _sync_figure_plan_to_skeleton(
+            session,
+            plan=plan,
+            old_figure_no=old_figure_no,
+            changed_fields=payload.model_fields_set,
+        )
+
+        await _maybe_await(session.commit())
+    except IntegrityError as exc:
+        await _maybe_await(session.rollback())
+        raise AppException(
+            code=ErrorCode.CONFLICT.value,
+            message="Figure plan update conflicts with an existing record",
+            status_code=409,
+            details={"plan_id": plan_id},
+        ) from exc
+
+    return _build_figure_plan_detail(plan)
+
+
+async def _sync_figure_plan_to_skeleton(
+    session: SessionLike,
+    *,
+    plan: FigurePlan,
+    old_figure_no: str,
+    changed_fields: set[str],
+) -> None:
+    """Sync figure_no/title changes back to the skeleton's figure_framework."""
+    syncable = {"figure_no", "title", "claim_text"}
+    if not (changed_fields & syncable):
+        logger.debug("_sync_figure_plan_to_skeleton: no syncable fields in %s", changed_fields)
+        return
+
+    logger.info(
+        "_sync_figure_plan_to_skeleton: plan=%s old_figure_no=%s skeleton_version=%s changed=%s",
+        plan.id,
+        old_figure_no,
+        plan.skeleton_version,
+        changed_fields & syncable,
+    )
+
+    # Find skeleton: by exact version if available, fallback to latest
+    skeleton = None
+    if plan.skeleton_version is not None:
+        result = await _maybe_await(
+            session.execute(
+                select(StructureSkeleton)
+                .where(
+                    StructureSkeleton.system_id == plan.system_id,
+                    StructureSkeleton.version == plan.skeleton_version,
+                )
+                .limit(1)
+            )
+        )
+        skeleton = result.scalar_one_or_none()
+
+    # Fallback: use latest skeleton if exact version not found or not set
+    if skeleton is None:
+        result = await _maybe_await(
+            session.execute(
+                select(StructureSkeleton)
+                .where(StructureSkeleton.system_id == plan.system_id)
+                .order_by(StructureSkeleton.version.desc())
+                .limit(1)
+            )
+        )
+        skeleton = result.scalar_one_or_none()
+    if skeleton is None:
+        logger.warning(
+            "_sync_figure_plan_to_skeleton: no skeleton found for system=%s", plan.system_id
+        )
+        return
+
+    framework = (skeleton.skeleton_json or {}).get("figure_framework")
+    if not isinstance(framework, list):
+        logger.warning(
+            "_sync_figure_plan_to_skeleton: figure_framework is not a list in skeleton=%s",
+            skeleton.id,
+        )
+        return
+
+    updated = False
+    for entry in framework:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("figure_id") != old_figure_no:
+            continue
+        if "figure_no" in changed_fields:
+            entry["figure_id"] = plan.figure_no
+        if "title" in changed_fields:
+            entry["title"] = plan.title
+        if "claim_text" in changed_fields:
+            entry["purpose"] = plan.claim_text
+        updated = True
+        break
+
+    if updated:
+        skeleton.skeleton_json = {**skeleton.skeleton_json, "figure_framework": framework}
+        skeleton.updated_at = datetime.now(UTC)
+        await _maybe_await(session.flush())
+        logger.info(
+            "_sync_figure_plan_to_skeleton: synced skeleton=%s version=%s",
+            skeleton.id,
+            skeleton.version,
+        )
+    else:
+        logger.warning(
+            (
+                "_sync_figure_plan_to_skeleton: no matching figure_id=%s "
+                "in skeleton=%s framework (entries: %s)"
+            ),
+            old_figure_no,
+            skeleton.id,
+            [
+                entry.get("figure_id")
+                for entry in framework
+                if isinstance(entry, dict)
+            ],
+        )
+        skeleton.updated_at = datetime.now(UTC)
+        await _maybe_await(session.flush())
+
+
+async def delete_figure_plan(
+    session: SessionLike,
+    plan_id: str,
+) -> None:
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+
+    await repository.delete_figure_plan(session, plan)
+    await _maybe_await(session.commit())
+
+
+async def transition_figure_plan_status(
+    session: SessionLike,
+    plan_id: str,
+    payload: FigurePlanStatusTransitionRequest,
+) -> FigurePlanDetail:
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+    allowed = VALID_STATUS_TRANSITIONS.get(plan.status, set())
+    if payload.status not in allowed:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message=f"Cannot transition from '{plan.status}' to '{payload.status}'",
+            status_code=422,
+            details={
+                "plan_id": plan_id,
+                "current_status": plan.status,
+                "target_status": payload.status,
+            },
+        )
+    plan = await repository.update_figure_plan_status(session, plan_id, payload.status)
+    await _maybe_await(session.commit())
+    return _build_figure_plan_detail(plan)
+
+
 def _build_figure_plan_detail(plan: FigurePlan) -> FigurePlanDetail:
     return FigurePlanDetail(
         id=plan.id,
@@ -296,6 +634,10 @@ def _build_figure_plan_detail(plan: FigurePlan) -> FigurePlanDetail:
         acceptance_criteria_json=plan.acceptance_criteria_json,
         status=plan.status,
         version=plan.version,
+        section_key=plan.section_key,
+        skeleton_version=plan.skeleton_version,
+        brief_text=plan.brief_text,
+        brief_confirmed_at=plan.brief_confirmed_at,
         created_at=plan.created_at,
         updated_at=plan.updated_at,
     )
@@ -551,7 +893,7 @@ async def complete_evidence_matrix_generation(
             payload={"code": exc.code, "details": exc.details},
             broadcaster=broadcaster,
         )
-    except Exception as exc:
+    except Exception:
         await _record_generation_failure(
             session=session,
             task_service=task_service,
@@ -597,7 +939,9 @@ async def approve_claim(
             (
                 await _maybe_await(
                     session.scalars(
-                        select(SystemSection.section_key).where(SystemSection.system_id == claim.system_id)
+                        select(SystemSection.section_key).where(
+                            SystemSection.system_id == claim.system_id
+                        )
                     )
                 )
             ).all()
@@ -825,13 +1169,394 @@ async def batch_approve_claims(
             failed.append({"claimId": claim_id, "error": "Claim does not belong to this system"})
             continue
         if claim.section_ref not in allowed_section_keys:
-            failed.append({"claimId": claim_id, "error": "Claim section_ref is not defined for this system"})
+            failed.append(
+                {"claimId": claim_id, "error": "Claim section_ref is not defined for this system"}
+            )
             continue
         await repository.update_claim_status(session, claim, "approved")
         succeeded.append(claim_id)
 
     await _maybe_await(session.commit())
     return BatchApproveClaimsResponse(succeeded=succeeded, failed=failed)
+
+
+# ---------------------------------------------------------------------------
+# FigurePlanAsset services (G1 – image upload)
+# ---------------------------------------------------------------------------
+
+
+async def upload_figure_plan_asset(
+    session: SessionLike,
+    plan_id: str,
+    *,
+    file_obj: BinaryIO,
+    file_name: str,
+    content_type: str,
+    role: str = "source_image",
+) -> FigurePlanAssetDetail:
+    if not content_type.startswith("image/"):
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message="Only image files are allowed",
+            status_code=400,
+            details={"content_type": content_type, "plan_id": plan_id},
+        )
+
+    file_obj.seek(0, SEEK_END)
+    size = file_obj.tell()
+    file_obj.seek(0)
+    if size > 10 * 1024 * 1024:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message="File size exceeds 10MB limit",
+            status_code=400,
+            details={"file_name": file_name, "size": size, "plan_id": plan_id},
+        )
+
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+
+    asset = await create_asset_from_upload(
+        session,
+        system_id=plan.system_id,
+        file_obj=file_obj,
+        file_name=file_name,
+        content_type=content_type,
+        asset_type="image",
+    )
+
+    existing_bindings = await repository.list_figure_plan_assets(session, plan_id)
+    position = len(existing_bindings)
+
+    binding = await repository.create_figure_plan_asset(
+        session,
+        figure_plan_id=plan_id,
+        asset_id=asset.id,
+        role=role,
+        position=position,
+    )
+    await _maybe_await(session.commit())
+
+    preview_url = _safe_presigned_url(asset.storage_key)
+    return _build_figure_plan_asset_detail(binding, asset, preview_url)
+
+
+async def list_figure_plan_assets(
+    session: SessionLike,
+    plan_id: str,
+) -> list[FigurePlanAssetDetail]:
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+
+    rows = await repository.list_figure_plan_assets_with_details(session, plan_id)
+    results: list[FigurePlanAssetDetail] = []
+    for binding, asset in rows:
+        preview_url = _safe_presigned_url(asset.storage_key)
+        results.append(_build_figure_plan_asset_detail(binding, asset, preview_url))
+    return results
+
+
+async def delete_figure_plan_asset_binding(
+    session: SessionLike,
+    plan_id: str,
+    binding_id: str,
+) -> None:
+    binding = await repository.get_figure_plan_asset(session, binding_id)
+    if binding is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan asset binding not found",
+            status_code=404,
+            details={"binding_id": binding_id},
+        )
+    # Verify binding belongs to this plan (security check)
+    if binding.figure_plan_id != plan_id:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message="Binding does not belong to this plan",
+            status_code=403,
+            details={"binding_id": binding_id, "plan_id": plan_id},
+        )
+    await repository.delete_figure_plan_asset(session, binding)
+    await _maybe_await(session.commit())
+
+
+def _safe_presigned_url(storage_key: str) -> str | None:
+    try:
+        return generate_presigned_url(storage_key)
+    except Exception:
+        logger.warning("Failed to generate presigned URL for %s", storage_key, exc_info=True)
+        return None
+
+
+def _build_figure_plan_asset_detail(
+    binding: FigurePlanAsset,
+    asset: Asset,
+    preview_url: str | None,
+) -> FigurePlanAssetDetail:
+    return FigurePlanAssetDetail(
+        id=binding.id,
+        figure_plan_id=binding.figure_plan_id,
+        asset_id=binding.asset_id,
+        role=binding.role,
+        position=binding.position,
+        file_name=asset.file_name,
+        mime_type=asset.mime_type,
+        preview_url=preview_url,
+        created_at=binding.created_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# FigurePlanChat services (G1 – agent chat)
+# ---------------------------------------------------------------------------
+
+
+async def list_chat_messages_for_plan(
+    session: SessionLike,
+    plan_id: str,
+    provider: str,
+) -> list[ChatMessageDetail]:
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+
+    chat_session = await repository.get_active_chat_session(session, plan_id, provider)
+    if chat_session is None:
+        return []
+
+    messages = await repository.list_chat_messages(session, chat_session.id)
+    return [_build_chat_message_detail(m) for m in messages]
+
+
+async def send_chat_message_stream(
+    session: SessionLike,
+    plan_id: str,
+    provider_name: str,
+    content: str,
+) -> AsyncGenerator[str, None]:
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+
+    provider_value = str(provider_name)
+    try:
+        provider = ChatCliProvider(provider_value)
+    except ValueError as exc:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message=f"Unsupported provider: {provider_value}",
+            status_code=422,
+            details={"provider": provider_value},
+        ) from exc
+    chat_session = await _get_or_create_chat_session(session, plan_id, provider_value)
+
+    if await repository.is_chat_session_busy(session, chat_session.id):
+        raise _build_chat_conflict(plan_id, provider_value)
+
+    try:
+        turn_index = await repository.get_next_turn_index(session, chat_session.id)
+        await repository.create_chat_message(
+            session,
+            session_id=chat_session.id,
+            role="user",
+            content=content,
+            status="completed",
+            turn_index=turn_index,
+        )
+        assistant_msg = await repository.create_chat_message(
+            session,
+            session_id=chat_session.id,
+            role="assistant",
+            content="",
+            status="streaming",
+            turn_index=turn_index + 1,
+        )
+        chat_session.last_message_at = datetime.now(UTC)
+        await _maybe_await(session.commit())
+    except IntegrityError as exc:
+        await _maybe_await(session.rollback())
+        raise _build_chat_conflict(plan_id, provider_value) from exc
+
+    context = await _build_context_prompt(session, plan_id)
+
+    async def _stream() -> AsyncGenerator[str, None]:
+        collected_text: list[str] = []
+        extracted_session_id: str | None = None
+
+        def _persist_session_id() -> None:
+            """Write provider_session_id to the chat session if changed."""
+            nonlocal extracted_session_id
+            if extracted_session_id and extracted_session_id != chat_session.provider_session_id:
+                chat_session.provider_session_id = extracted_session_id
+
+        try:
+            async for chunk in invoke_chat_stream(
+                provider,
+                content,
+                session_id=chat_session.provider_session_id,
+                context=context,
+            ):
+                if chunk.strip().startswith("__SESSION_ID__:"):
+                    extracted_session_id = chunk.strip().split(":", 1)[1].strip()
+                    _persist_session_id()
+                    await _maybe_await(session.commit())
+                    continue
+                collected_text.append(chunk)
+                yield f"data: {_json_event('delta', chunk)}\n\n"
+
+            assistant_msg.content = "".join(collected_text)
+            assistant_msg.status = "completed"
+            _persist_session_id()
+            chat_session.last_message_at = datetime.now(UTC)
+            await _maybe_await(session.commit())
+            yield f"data: {_json_event('done', '')}\n\n"
+        except AppException as exc:
+            user_message = _translate_provider_error(exc, provider)
+            logger.warning("Chat provider error: %s (code=%s)", exc.message, exc.code)
+            assistant_msg.content = "".join(collected_text)
+            assistant_msg.status = "failed"
+            assistant_msg.error_text = user_message
+            _persist_session_id()
+            await _maybe_await(session.commit())
+            yield f"data: {_json_event('error', user_message)}\n\n"
+        except Exception as exc:
+            logger.exception("Chat stream error: %s", exc)
+            assistant_msg.content = "".join(collected_text)
+            assistant_msg.status = "failed"
+            assistant_msg.error_text = str(exc)
+            _persist_session_id()
+            await _maybe_await(session.commit())
+            yield f"data: {_json_event('error', str(exc))}\n\n"
+
+    return _stream()
+
+
+def _translate_provider_error(exc: AppException, provider: ChatCliProvider) -> str:
+    """Translate technical errors to user-friendly messages."""
+    if "CLI tool not found" in exc.message:
+        return f"{provider.value} AI 助手未正确安装，请联系管理员"
+    elif "timeout" in exc.message.lower():
+        return "AI 助手响应超时，请稍后重试"
+    elif "exited with code" in exc.message:
+        return "AI 助手暂时遇到了一点小麻烦，请稍后重试"
+    else:
+        return "AI 服务暂时不可用，请稍后重试"
+
+
+async def _get_or_create_chat_session(
+    session: SessionLike,
+    plan_id: str,
+    provider: str,
+) -> FigurePlanChatSession:
+    chat_session = await repository.get_active_chat_session(session, plan_id, provider)
+    if chat_session is not None:
+        return chat_session
+
+    try:
+        chat_session = await repository.create_chat_session(
+            session,
+            figure_plan_id=plan_id,
+            provider=provider,
+        )
+        await _maybe_await(session.commit())
+        return chat_session
+    except IntegrityError:
+        await _maybe_await(session.rollback())
+        chat_session = await repository.get_active_chat_session(session, plan_id, provider)
+        if chat_session is None:
+            raise
+        return chat_session
+
+
+def _build_chat_conflict(plan_id: str, provider: str) -> AppException:
+    return AppException(
+        code=ErrorCode.CONFLICT.value,
+        message="Another message is being processed for this session. Please wait.",
+        status_code=409,
+        details={"plan_id": plan_id, "provider": provider},
+    )
+
+
+async def _build_context_prompt(session: SessionLike, plan_id: str) -> str:
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        return ""
+
+    section_title = "N/A"
+    if plan.section_key:
+        result = await _maybe_await(
+            session.execute(
+                select(SystemSection.title)
+                .where(
+                    SystemSection.system_id == plan.system_id,
+                    SystemSection.section_key == plan.section_key,
+                )
+                .limit(1)
+            )
+        )
+        section_title = result.scalar_one_or_none() or plan.section_key
+
+    assets = await repository.list_figure_plan_assets_with_details(session, plan_id)
+    context_parts = [
+        "# FigurePlan Context",
+        f"Title: {plan.title}",
+        f"Claim: {plan.claim_text or 'N/A'}",
+        f"Section: {section_title}",
+        f"Brief: {plan.brief_text or 'N/A'}",
+    ]
+
+    if assets:
+        context_parts.append("")
+        context_parts.append("## Uploaded Images:")
+        for binding, asset in assets:
+            uploaded_at = binding.created_at.isoformat() if binding.created_at else "unknown"
+            context_parts.append(
+                f"- {asset.file_name} (uploaded at {uploaded_at})"
+            )
+
+    return "\n".join(context_parts)
+
+
+def _json_event(event_type: str, content: str) -> str:
+    import json
+
+    return json.dumps({"type": event_type, "content": content}, ensure_ascii=False)
+
+
+def _build_chat_message_detail(msg: FigurePlanChatMessage) -> ChatMessageDetail:
+    return ChatMessageDetail(
+        id=msg.id,
+        session_id=msg.session_id,
+        role=msg.role,
+        content=msg.content,
+        status=msg.status,
+        turn_index=msg.turn_index,
+        error_text=msg.error_text,
+        created_at=msg.created_at,
+    )
 
 
 __all__ = [
@@ -842,11 +1567,20 @@ __all__ = [
     "complete_evidence_matrix_generation",
     "complete_figure_plan_generation",
     "confirm_figure_plan",
+    "delete_figure_plan",
+    "delete_figure_plan_asset_binding",
     "generate_evidence_matrix",
     "generate_figure_plan",
     "get_evidence_task_session_bind",
+    "list_chat_messages_for_plan",
     "list_claims",
+    "list_figure_plan_assets",
     "list_figure_plans",
+    "patch_figure_plan",
     "run_evidence_matrix_generation_task",
     "run_figure_plan_generation_task",
+    "send_chat_message_stream",
+    "transition_figure_plan_status",
+    "update_figure_plan_brief",
+    "upload_figure_plan_asset",
 ]

@@ -39,3 +39,4 @@ Thumbs.db
 **/.trellis
 **/llmdoc
 **/openspec
+.tmp/

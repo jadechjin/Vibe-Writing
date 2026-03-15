@@ -28,23 +28,11 @@ async def create_system(
     project_id: str,
     system_no: int,
     title: str,
-    research_goal: str | None = None,
-    samples_subjects: str | None = None,
-    variables_controls: str | None = None,
-    output_metrics: str | None = None,
-    methods_summary: str | None = None,
-    system_card_json: dict[str, Any] | None = None,
 ) -> ExperimentalSystem:
     system = ExperimentalSystem(
         project_id=project_id,
         system_no=system_no,
         title=title,
-        research_goal=research_goal,
-        samples_subjects=samples_subjects,
-        variables_controls=variables_controls,
-        output_metrics=output_metrics,
-        methods_summary=methods_summary,
-        system_card_json=system_card_json or {},
     )
     session.add(system)
     await _maybe_await(session.flush())

@@ -73,6 +73,17 @@ def download_asset_to_temp(storage_key: str, suffix: str = "") -> Path:
     return Path(tmp.name)
 
 
+def generate_presigned_url(storage_key: str, expires: int = 3600) -> str:
+    """Generate a presigned URL for reading an object from MinIO."""
+    settings = get_settings()
+    client = _get_s3_client()
+    return client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.minio_bucket, "Key": storage_key},
+        ExpiresIn=expires,
+    )
+
+
 def _guess_suffix(key: str) -> str:
     if "." in key:
         return "." + key.rsplit(".", 1)[-1]

@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.websocket import get_broadcaster
 from app.common.schemas import ApiResponse, JobHandle
 from app.modules.skeletons.schemas import (
+    BuildPromptRequest,
+    BuildPromptResponse,
     SkeletonConfirmResponse,
     SkeletonDetail,
     SkeletonGenerateRequest,
@@ -17,7 +19,9 @@ from app.modules.skeletons.schemas import (
 )
 from app.modules.skeletons.service import (
     SKELETON_TASK_START_DELAY_SECONDS,
+    build_skeleton_prompt as build_skeleton_prompt_service,
     confirm_skeleton as confirm_skeleton_service,
+    delete_skeleton as delete_skeleton_service,
     generate_skeleton as generate_skeleton_service,
     get_skeleton as get_skeleton_service,
     get_skeleton_task_session_bind,
@@ -30,6 +34,19 @@ from app.modules.skeletons.service import (
 from app.persistence import get_db_session
 
 router = APIRouter(tags=["skeletons"])
+
+
+@router.post(
+    "/systems/{system_id}/skeletons/build-prompt",
+    response_model=ApiResponse[BuildPromptResponse],
+)
+async def build_prompt(
+    system_id: str,
+    payload: BuildPromptRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BuildPromptResponse]:
+    result = await build_skeleton_prompt_service(session, system_id, payload)
+    return ApiResponse(data=result)
 
 
 @router.post(
@@ -56,6 +73,8 @@ async def generate_skeleton(
             system_id=system_id,
             source_asset_ids=payload.source_asset_ids,
             user_intent=payload.user_intent,
+            provider=payload.provider,
+            custom_prompt=payload.custom_prompt,
             broadcaster=broadcaster,
             delay_seconds=SKELETON_TASK_START_DELAY_SECONDS,
         )
@@ -100,6 +119,17 @@ async def patch_skeleton(
     return ApiResponse(data=detail)
 
 
+@router.delete(
+    "/skeletons/{skeleton_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_skeleton(
+    skeleton_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    await delete_skeleton_service(session, skeleton_id)
+
+
 @router.post(
     "/skeletons/{skeleton_id}/confirm",
     response_model=ApiResponse[SkeletonConfirmResponse],
@@ -136,6 +166,7 @@ async def revise_skeleton(
             system_id=system_id,
             skeleton_id=payload.skeleton_id,
             feedback=payload.feedback,
+            provider=payload.provider,
             broadcaster=broadcaster,
             delay_seconds=SKELETON_TASK_START_DELAY_SECONDS,
         )

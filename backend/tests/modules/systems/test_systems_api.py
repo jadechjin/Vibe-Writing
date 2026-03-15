@@ -21,6 +21,7 @@ from app.persistence.models.asset import Asset
 from app.persistence.models.evidence import FigurePlan
 from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.project import Project, ProjectMember, ProjectMemberRole
+from app.persistence.models.skeleton import StructureSkeleton
 from app.persistence.models.system import ExperimentalSystem, SystemSection
 from app.persistence.models.workflow import WorkflowEvent, WorkflowInstance
 
@@ -68,6 +69,7 @@ ALL_TABLES = [
     ProjectMember.__table__,
     ExperimentalSystem.__table__,
     SystemSection.__table__,
+    StructureSkeleton.__table__,
     Asset.__table__,
     AssetManifest.__table__,
     FigurePlan.__table__,
@@ -124,8 +126,15 @@ def async_client(engine, monkeypatch) -> Generator[TestClient, None, None]:
     app = create_app()
     sync_session = Session(engine)
     session = object.__new__(RunSyncAsyncSession)
-    session.run_sync = AsyncMock(side_effect=lambda fn, *args, **kwargs: fn(sync_session, *args, **kwargs))
-    session.execute = AsyncMock(side_effect=lambda statement, *args, **kwargs: sync_session.execute(statement, *args, **kwargs))
+
+    def _run_sync(fn, *args, **kwargs):
+        return fn(sync_session, *args, **kwargs)
+
+    def _execute(statement, *args, **kwargs):
+        return sync_session.execute(statement, *args, **kwargs)
+
+    session.run_sync = AsyncMock(side_effect=_run_sync)
+    session.execute = AsyncMock(side_effect=_execute)
     session.flush = AsyncMock(side_effect=sync_session.flush)
     session.refresh = AsyncMock(side_effect=sync_session.refresh)
     session.commit = AsyncMock(side_effect=sync_session.commit)
@@ -133,7 +142,9 @@ def async_client(engine, monkeypatch) -> Generator[TestClient, None, None]:
     session.add = sync_session.add
     session.sync_session = sync_session
 
-    session_factory = lambda: FakeAsyncSessionContext(session)
+    def session_factory() -> FakeAsyncSessionContext:
+        return FakeAsyncSessionContext(session)
+
     monkeypatch.setattr("app.persistence.session.async_session_factory", session_factory)
 
     with TestClient(app) as test_client:
@@ -156,7 +167,9 @@ def _create_project(
     )
     session.add(project)
     session.flush()
-    session.add(ProjectMember(project_id=project.id, user_id=owner_id, role=ProjectMemberRole.OWNER.value))
+    session.add(
+        ProjectMember(project_id=project.id, user_id=owner_id, role=ProjectMemberRole.OWNER.value)
+    )
     session.flush()
     return project
 
@@ -168,28 +181,34 @@ def _create_system(
     system_no: int = 1,
     title: str = "Test System",
     status: str = SystemState.DRAFT.value,
-    research_goal: str | None = None,
-    samples_subjects: str | None = None,
-    variables_controls: str | None = None,
-    output_metrics: str | None = None,
-    methods_summary: str | None = None,
-    system_card_json: dict | None = None,
 ) -> ExperimentalSystem:
     system = ExperimentalSystem(
         project_id=project_id,
         system_no=system_no,
         title=title,
         status=status,
-        research_goal=research_goal,
-        samples_subjects=samples_subjects,
-        variables_controls=variables_controls,
-        output_metrics=output_metrics,
-        methods_summary=methods_summary,
-        system_card_json=system_card_json or {},
     )
     session.add(system)
     session.flush()
     return system
+
+
+def _create_confirmed_skeleton(
+    session: Session,
+    *,
+    system_id: str,
+    version: int = 1,
+) -> StructureSkeleton:
+    skeleton = StructureSkeleton(
+        system_id=system_id,
+        version=version,
+        skeleton_json={"nodes": []},
+        source_asset_ids=[],
+        status="confirmed",
+    )
+    session.add(skeleton)
+    session.flush()
+    return skeleton
 
 
 def test_create_system_persists_and_returns_detail(client: TestClient, engine) -> None:
@@ -208,12 +227,6 @@ def test_create_system_persists_and_returns_detail(client: TestClient, engine) -
         f"/api/projects/{project_id}/systems",
         json={
             "title": " My Experiment ",
-            "researchGoal": "Test hypothesis about X",
-            "samplesSubjects": "10 samples",
-            "variablesControls": "Temperature, pressure",
-            "outputMetrics": "Yield percentage",
-            "methodsSummary": "Standard protocol",
-            "systemCardJson": {"key": "value"},
         },
     )
 
@@ -225,8 +238,6 @@ def test_create_system_persists_and_returns_detail(client: TestClient, engine) -
     assert data["systemNo"] == 1
     assert data["projectId"] == project_id
     assert data["status"] == SystemState.DRAFT.value
-    assert data["researchGoal"] == "Test hypothesis about X"
-    assert data["systemCardJson"] == {"key": "value"}
     assert [
         (section["sectionKey"], section["title"], section["orderNo"])
         for section in data["sections"]
@@ -246,10 +257,7 @@ def test_create_system_persists_and_returns_detail(client: TestClient, engine) -
     assert system.title == "My Experiment"
     assert system.project_id == project_id
     assert system.system_no == 1
-    assert [
-        (section.section_key, section.title, section.order_no)
-        for section in sections
-    ] == [
+    assert [(section.section_key, section.title, section.order_no) for section in sections] == [
         ("introduction", "Introduction", 1),
         ("methods", "Methods", 2),
         ("results", "Results", 3),
@@ -396,8 +404,6 @@ def test_update_system_definition(client: TestClient, engine) -> None:
         f"/api/systems/{system_id}",
         json={
             "title": "Updated Title",
-            "researchGoal": "New goal",
-            "systemCardJson": {"updated": True},
         },
     )
 
@@ -405,8 +411,6 @@ def test_update_system_definition(client: TestClient, engine) -> None:
     body = response.json()
     assert body["success"] is True
     assert body["data"]["title"] == "Updated Title"
-    assert body["data"]["researchGoal"] == "New goal"
-    assert body["data"]["systemCardJson"] == {"updated": True}
 
 
 def test_update_system_returns_404_for_missing_system(client: TestClient) -> None:
@@ -433,19 +437,15 @@ def test_get_workflow_returns_null_when_no_workflow(client: TestClient, engine) 
     assert body["data"] is None
 
 
-def test_advance_route_uses_asyncsession_run_sync_for_g1_blocked(async_client: TestClient, engine) -> None:
+def test_advance_route_uses_asyncsession_run_sync_for_g1_blocked(
+    async_client: TestClient, engine
+) -> None:
     with Session(engine) as session:
         project = _create_project(session)
         system = _create_system(
             session,
             project_id=project.id,
             status=SystemState.SYSTEM_DEFINED.value,
-            research_goal="Investigate X",
-            samples_subjects="10 mice",
-            variables_controls="Temperature",
-            output_metrics="Survival rate",
-            methods_summary="Standard protocol",
-            system_card_json={"hypothesis": "X causes Y"},
         )
         session.commit()
         system_id = system.id
@@ -470,7 +470,9 @@ async def test_advance_blocked_on_g0_returns_blockers() -> None:
         adapter.sync_session.add(project)
         adapter.sync_session.flush()
         adapter.sync_session.add(
-            ProjectMember(project_id=project.id, user_id="owner-1", role=ProjectMemberRole.OWNER.value)
+            ProjectMember(
+                project_id=project.id, user_id="owner-1", role=ProjectMemberRole.OWNER.value
+            )
         )
         adapter.sync_session.flush()
 
@@ -490,7 +492,7 @@ async def test_advance_blocked_on_g0_returns_blockers() -> None:
         assert result.gate == GateKey.G0
         assert result.current_state == SystemState.DRAFT
         assert len(result.blockers) > 0
-        assert result.blockers[0].code == "system_definition_incomplete"
+        assert result.blockers[0].code == "skeleton_not_confirmed"
         assert result.snapshot is not None
         assert result.snapshot.status == TaskStatus.WAITING_USER
 
@@ -517,7 +519,9 @@ async def test_advance_passed_from_g0_to_system_defined() -> None:
         adapter.sync_session.add(project)
         adapter.sync_session.flush()
         adapter.sync_session.add(
-            ProjectMember(project_id=project.id, user_id="owner-1", role=ProjectMemberRole.OWNER.value)
+            ProjectMember(
+                project_id=project.id, user_id="owner-1", role=ProjectMemberRole.OWNER.value
+            )
         )
         adapter.sync_session.flush()
 
@@ -526,15 +530,10 @@ async def test_advance_passed_from_g0_to_system_defined() -> None:
             system_no=1,
             title="Complete System",
             status=SystemState.DRAFT.value,
-            research_goal="Investigate X",
-            samples_subjects="10 mice",
-            variables_controls="Temperature",
-            output_metrics="Survival rate",
-            methods_summary="Standard protocol",
-            system_card_json={"hypothesis": "X causes Y"},
         )
         adapter.sync_session.add(system)
         adapter.sync_session.flush()
+        _create_confirmed_skeleton(adapter.sync_session, system_id=system.id)
         adapter.sync_session.commit()
 
         system_id = system.id
@@ -572,7 +571,9 @@ async def test_get_workflow_snapshot_after_advance() -> None:
         adapter.sync_session.add(project)
         adapter.sync_session.flush()
         adapter.sync_session.add(
-            ProjectMember(project_id=project.id, user_id="owner-1", role=ProjectMemberRole.OWNER.value)
+            ProjectMember(
+                project_id=project.id, user_id="owner-1", role=ProjectMemberRole.OWNER.value
+            )
         )
         adapter.sync_session.flush()
 
@@ -581,15 +582,10 @@ async def test_get_workflow_snapshot_after_advance() -> None:
             system_no=1,
             title="Complete System",
             status=SystemState.DRAFT.value,
-            research_goal="Investigate X",
-            samples_subjects="10 mice",
-            variables_controls="Temperature",
-            output_metrics="Survival rate",
-            methods_summary="Standard protocol",
-            system_card_json={"hypothesis": "X causes Y"},
         )
         adapter.sync_session.add(system)
         adapter.sync_session.flush()
+        _create_confirmed_skeleton(adapter.sync_session, system_id=system.id)
         adapter.sync_session.commit()
 
         await advance_system(adapter, system.id)  # type: ignore[arg-type]
@@ -707,9 +703,7 @@ def test_delete_nonexistent_system_returns_404(client: TestClient) -> None:
 # ---- system_no concurrent safety test ----
 
 
-def test_create_system_with_duplicate_system_no_returns_409(
-    client: TestClient, engine
-) -> None:
+def test_create_system_with_duplicate_system_no_returns_409(client: TestClient, engine) -> None:
     with Session(engine) as session:
         project = _create_project(session)
         _create_system(session, project_id=project.id, system_no=1, title="Existing")

@@ -44,12 +44,6 @@ export type CreateProjectInput = {
 
 export type CreateSystemInput = {
   title: string
-  researchGoal?: string | null
-  samplesSubjects?: string | null
-  variablesControls?: string | null
-  outputMetrics?: string | null
-  methodsSummary?: string | null
-  systemCardJson?: Record<string, unknown>
 }
 
 export type SystemDetail = {
@@ -58,12 +52,6 @@ export type SystemDetail = {
   systemNo: number
   title: string
   status: string
-  researchGoal: string | null
-  samplesSubjects: string | null
-  variablesControls: string | null
-  outputMetrics: string | null
-  methodsSummary: string | null
-  systemCardJson: Record<string, unknown>
   sections: { id: string; sectionKey: string; title: string; orderNo: number }[]
   createdAt: string
   updatedAt: string

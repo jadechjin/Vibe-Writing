@@ -79,12 +79,6 @@ async def create_system(
             project_id=project_id,
             system_no=system_no,
             title=payload.title,
-            research_goal=payload.research_goal,
-            samples_subjects=payload.samples_subjects,
-            variables_controls=payload.variables_controls,
-            output_metrics=payload.output_metrics,
-            methods_summary=payload.methods_summary,
-            system_card_json=payload.system_card_json,
         )
 
         # Idempotency check: only create sections if none exist
@@ -112,7 +106,7 @@ async def create_system(
                 message="System number conflict, please retry",
                 status_code=409,
                 details={"project_id": project_id},
-            )
+            ) from exc
         raise
 
     stored = await repository.get_system_by_id(session, system.id)
@@ -462,11 +456,14 @@ def _normalize_section_source_item(
             raw_section.get("id"),
         )
         explicit_key_provided = raw_key is not None
-        title = _first_non_blank_str(
-            raw_section.get("title"),
-            raw_section.get("name"),
-            raw_section.get("label"),
-        ) or raw_key
+        title = (
+            _first_non_blank_str(
+                raw_section.get("title"),
+                raw_section.get("name"),
+                raw_section.get("label"),
+            )
+            or raw_key
+        )
 
     if not title:
         return None
@@ -506,12 +503,6 @@ def _build_system_detail(system: ExperimentalSystem) -> SystemDetail:
         system_no=system.system_no,
         title=system.title,
         status=system.status,
-        research_goal=system.research_goal,
-        samples_subjects=system.samples_subjects,
-        variables_controls=system.variables_controls,
-        output_metrics=system.output_metrics,
-        methods_summary=system.methods_summary,
-        system_card_json=system.system_card_json,
         sections=[
             SystemSectionSummary(
                 id=section.id,

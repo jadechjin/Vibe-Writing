@@ -100,13 +100,6 @@ const inputStyle: CSSProperties = {
   outline: "none",
 }
 
-const textareaStyle: CSSProperties = {
-  ...inputStyle,
-  minHeight: "60px",
-  resize: "vertical" as const,
-  fontFamily: "inherit",
-}
-
 const formActionsStyle: CSSProperties = {
   display: "flex",
   gap: "10px",
@@ -142,7 +135,6 @@ export default function ProjectPage() {
   const deleteSystem = useDeleteSystem(projectId)
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState("")
-  const [researchGoal, setResearchGoal] = useState("")
   const [deleteErrorMsg, setDeleteErrorMsg] = useState<string | null>(null)
   const [deletingSystemId, setDeletingSystemId] = useState<string | null>(null)
   const [errorSystemId, setErrorSystemId] = useState<string | null>(null)
@@ -177,14 +169,12 @@ export default function ProjectPage() {
 
     const input: CreateSystemInput = {
       title: title.trim(),
-      researchGoal: researchGoal.trim() || null,
     }
 
     createSystem.mutate(input, {
       onSuccess: () => {
         setShowForm(false)
         setTitle("")
-        setResearchGoal("")
       },
     })
   }
@@ -250,12 +240,6 @@ export default function ProjectPage() {
               placeholder="体系标题"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-            />
-            <textarea
-              style={textareaStyle}
-              placeholder="研究目标（选填）"
-              value={researchGoal}
-              onChange={(e) => setResearchGoal(e.target.value)}
             />
             {createSystem.isError ? (
               <div style={{ color: "#f87171", fontSize: "13px" }}>

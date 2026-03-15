@@ -9,12 +9,6 @@ import type { SystemDetail } from "./useProjects"
 
 export type SystemUpdateInput = {
   title?: string
-  researchGoal?: string | null
-  samplesSubjects?: string | null
-  variablesControls?: string | null
-  outputMetrics?: string | null
-  methodsSummary?: string | null
-  systemCardJson?: Record<string, unknown>
 }
 
 // ---- Query keys ----

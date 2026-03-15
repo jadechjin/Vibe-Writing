@@ -16,7 +16,7 @@ const workspaceStyle: CSSProperties = {
 
 const splitPaneStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(280px, 0.95fr) minmax(0, 1.45fr)",
+  gridTemplateColumns: "minmax(200px, 0.55fr) minmax(0, 1.85fr)",
   gap: "18px",
   minHeight: 0,
 }

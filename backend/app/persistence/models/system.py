@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.enums import SystemState
 from app.persistence.base import AuditMixin, Base, UUIDPrimaryKeyMixin
-from app.persistence.types import JsonDict, LongText, ShortText
+from app.persistence.types import ShortText
 
 if TYPE_CHECKING:
     from app.persistence.models.project import Project
@@ -30,16 +30,6 @@ class ExperimentalSystem(UUIDPrimaryKeyMixin, AuditMixin, Base):
     )
     system_no: Mapped[int] = mapped_column(nullable=False)
     title: Mapped[str] = mapped_column(ShortText, nullable=False)
-    research_goal: Mapped[str | None] = mapped_column(LongText(), nullable=True)
-    samples_subjects: Mapped[str | None] = mapped_column(LongText(), nullable=True)
-    variables_controls: Mapped[str | None] = mapped_column(LongText(), nullable=True)
-    output_metrics: Mapped[str | None] = mapped_column(LongText(), nullable=True)
-    methods_summary: Mapped[str | None] = mapped_column(LongText(), nullable=True)
-    system_card_json: Mapped[dict[str, Any]] = mapped_column(
-        JsonDict,
-        default=dict,
-        nullable=False,
-    )
     status: Mapped[str] = mapped_column(
         String(64),
         default=SystemState.DRAFT.value,

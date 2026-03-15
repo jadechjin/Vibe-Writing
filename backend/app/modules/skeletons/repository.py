@@ -58,3 +58,8 @@ async def has_confirmed_skeleton(session: SessionLike, system_id: str) -> bool:
         .limit(1)
     ))
     return result.scalar_one_or_none() is not None
+
+
+async def delete_skeleton(session: SessionLike, skeleton: StructureSkeleton) -> None:
+    await _maybe_await(session.delete(skeleton))
+    await _maybe_await(session.flush())

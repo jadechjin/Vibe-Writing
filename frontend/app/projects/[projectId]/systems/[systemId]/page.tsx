@@ -14,8 +14,7 @@ import {
   useSystemAdvance,
   type AdvanceResponse,
 } from "../../../../../hooks/useSystemAdvance"
-import { useSystemDetail, useUpdateSystem } from "../../../../../hooks/useSystem"
-import type { SystemUpdateInput } from "../../../../../hooks/useSystem"
+import { useSystemDetail } from "../../../../../hooks/useSystem"
 import type { TaskEvent } from "../../../../../lib/websocket"
 
 // ---- Styles ----
@@ -172,14 +171,6 @@ function SystemWorkspacePage({
   const invalidateWorkflow = useWorkflowInvalidation(systemId)
 
   const { data: systemDetail } = useSystemDetail(systemId)
-  const { mutate: updateSystem, isPending: updatePending } = useUpdateSystem(systemId)
-
-  const handleUpdateSystem = useCallback(
-    (data: SystemUpdateInput) => {
-      updateSystem(data)
-    },
-    [updateSystem],
-  )
 
   const handleInvalidate = useCallback(
     (event: TaskEvent) => {
@@ -255,8 +246,6 @@ function SystemWorkspacePage({
       latestBlockers={latestBlockers}
       latestEvent={latestEvent}
       systemDetail={systemDetail ?? null}
-      onUpdateSystem={handleUpdateSystem}
-      isUpdating={updatePending}
     />
   )
 

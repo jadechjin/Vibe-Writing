@@ -2,34 +2,26 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react"
 
-import { SystemDefinitionForm } from "./SystemDefinitionForm"
-import type { SystemDetail } from "../../hooks/useProjects"
-import type { SystemUpdateInput } from "../../hooks/useSystem"
-import type { Blocker } from "../../hooks/useProjectStatus"
 import { LiteratureTab } from "./g0/LiteratureTab"
 import { SkeletonTab } from "./g0/SkeletonTab"
+import { SkeletonOverlay } from "./g0/SkeletonOverlay"
 
 // ---- Props ----
 
 export type G0WorkbenchProps = Readonly<{
   systemId: string
-  systemDetail: SystemDetail | null
-  blockers: Blocker[]
-  onSave: (data: SystemUpdateInput) => void
   isReadOnly: boolean
-  isUpdating?: boolean
 }>
 
 // ---- Tab config ----
 
-type TabKey = "literature" | "skeleton" | "fields"
+type TabKey = "literature" | "skeleton"
 
 type TabDef = { key: TabKey; label: string }
 
 const TABS: TabDef[] = [
   { key: "literature", label: "模板文献" },
   { key: "skeleton", label: "结构骨架" },
-  { key: "fields", label: "体系字段" },
 ]
 
 // ---- Styles ----
@@ -75,29 +67,32 @@ const tabContentStyle: CSSProperties = {
 
 export function G0Workbench({
   systemId,
-  systemDetail,
-  blockers,
-  onSave,
   isReadOnly,
-  isUpdating,
 }: G0WorkbenchProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("skeleton")
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  const [overlayMode, setOverlayMode] = useState<"list" | "generating">("list")
+
+  function handleOpenOverlay(mode: "list" | "generating" = "list") {
+    setOverlayMode(mode)
+    setOverlayOpen(true)
+  }
 
   function renderTab(): ReactNode {
     switch (activeTab) {
       case "literature":
         return <LiteratureTab systemId={systemId} isReadOnly={isReadOnly} />
       case "skeleton":
-        return <SkeletonTab systemId={systemId} isReadOnly={isReadOnly} />
-      case "fields":
         return (
-          <SystemDefinitionForm
-            initialData={systemDetail}
-            blockers={isReadOnly ? [] : blockers}
-            onSave={onSave}
-            isReadOnly={isReadOnly}
-            isUpdating={isUpdating}
-          />
+          <>
+            <SkeletonTab systemId={systemId} isReadOnly={isReadOnly}
+              onOpenOverlay={handleOpenOverlay} />
+            {overlayOpen ? (
+              <SkeletonOverlay systemId={systemId} isReadOnly={isReadOnly}
+                initialMode={overlayMode}
+                onClose={() => setOverlayOpen(false)} />
+            ) : null}
+          </>
         )
       default:
         return null

@@ -70,5 +70,4 @@ def test_project_and_system_models_apply_defaults_on_flush() -> None:
         assert project.created_at is not None
         assert member.role == ProjectMemberRole.EDITOR.value
         assert system.status == SystemState.DRAFT.value
-        assert system.system_card_json == {}
         assert section.system_id == system.id

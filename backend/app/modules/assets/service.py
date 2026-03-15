@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from inspect import isawaitable
-from typing import Any, TypeVar
+from typing import Any, BinaryIO, TypeVar
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.common.enums import EventType, GateKey, SystemState, TaskStatus
 from app.common.errors import ErrorCode
 from app.common.events import TaskEvent
+from app.common.storage import upload_fileobj
 from app.core.exceptions import AppException
 from app.modules.assets import repository
 
@@ -81,6 +82,40 @@ async def _maybe_await(value: T) -> T:
     if isawaitable(value):
         return await value
     return value
+
+
+async def create_asset_from_upload(
+    session: SessionLike,
+    *,
+    system_id: str,
+    file_obj: BinaryIO,
+    file_name: str,
+    content_type: str,
+    asset_type: str = "image",
+    uploaded_by: str = "user",
+) -> Asset:
+    system = await repository.get_system_with_project(session, system_id)
+    if system is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="System not found",
+            status_code=404,
+            details={"system_id": system_id},
+        )
+
+    storage_key = upload_fileobj(file_obj, file_name, content_type)
+    asset = await repository.create_asset(
+        session,
+        project_id=system.project_id,
+        system_id=system.id,
+        asset_type=asset_type,
+        file_name=file_name,
+        storage_key=storage_key,
+        mime_type=content_type,
+        uploaded_by=uploaded_by,
+    )
+    await repository.create_asset_metadata(session, asset_id=asset.id)
+    return asset
 
 
 async def upload_asset(session: SessionLike, payload: AssetUploadRequest) -> AssetDetail:
@@ -867,6 +902,7 @@ __all__ = [
     "complete_manifest_generation",
     "confirm_asset_qc",
     "confirm_manifest",
+    "create_asset_from_upload",
     "create_analysis_run",
     "create_manifest",
     "delete_asset",

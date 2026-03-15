@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,7 +15,11 @@ def _to_camel(value: str) -> str:
 
 
 class CamelModel(BaseModel):
-    model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True)
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
 
 
 class FigurePlanDetail(CamelModel):
@@ -28,6 +33,10 @@ class FigurePlanDetail(CamelModel):
     acceptance_criteria_json: list[dict[str, Any]] | dict[str, Any] = Field(default_factory=list)
     status: str
     version: int
+    section_key: str | None = None
+    skeleton_version: int | None = None
+    brief_text: str | None = None
+    brief_confirmed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -38,6 +47,25 @@ class FigurePlanGenerateRequest(CamelModel):
 
 class FigurePlanConfirmRequest(CamelModel):
     status: Literal["confirmed"] = "confirmed"
+
+
+class FigurePlanUpdateBriefRequest(CamelModel):
+    brief_text: str
+
+
+class FigurePlanPatchRequest(CamelModel):
+    figure_no: str | None = None
+    title: str | None = None
+    claim_text: str | None = None
+    section_key: str | None = None
+    data_needed_json: list[dict[str, Any]] | dict[str, Any] | None = None
+    method_json: dict[str, Any] | None = None
+    acceptance_criteria_json: list[dict[str, Any]] | dict[str, Any] | None = None
+    brief_text: str | None = None
+
+
+class FigurePlanStatusTransitionRequest(CamelModel):
+    status: str
 
 
 class FigurePlanGenerateAcceptedResponse(CamelModel):
@@ -95,16 +123,67 @@ class BatchApproveClaimsResponse(CamelModel):
     failed: list[dict[str, str]]
 
 
+# ---------------------------------------------------------------------------
+# FigurePlanAsset schemas (G1 – image upload)
+# ---------------------------------------------------------------------------
+
+
+class FigurePlanAssetDetail(CamelModel):
+    id: str
+    figure_plan_id: str
+    asset_id: str
+    role: str
+    position: int
+    file_name: str
+    mime_type: str | None = None
+    preview_url: str | None = None
+    created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# FigurePlanChat schemas (G1 – agent chat)
+# ---------------------------------------------------------------------------
+
+
+class ChatProvider(str, Enum):
+    claude = "claude"
+    codex = "codex"
+    gemini = "gemini"
+
+
+class ChatMessageDetail(CamelModel):
+    id: str
+    session_id: str
+    role: str
+    content: str
+    status: str
+    turn_index: int
+    error_text: str | None = None
+    created_at: datetime
+
+
+class ChatMessageCreateRequest(CamelModel):
+    provider: ChatProvider
+    content: str
+
+
 __all__ = [
     "BatchApproveClaimsRequest",
     "BatchApproveClaimsResponse",
+    "ChatMessageCreateRequest",
+    "ChatMessageDetail",
+    "ChatProvider",
     "ClaimApproveRequest",
     "ClaimDetail",
     "ClaimEvidenceLinkCreateRequest",
     "ClaimEvidenceLinkDetail",
     "EvidenceMatrixGenerateAcceptedResponse",
+    "FigurePlanAssetDetail",
     "FigurePlanConfirmRequest",
     "FigurePlanDetail",
     "FigurePlanGenerateAcceptedResponse",
     "FigurePlanGenerateRequest",
+    "FigurePlanPatchRequest",
+    "FigurePlanStatusTransitionRequest",
+    "FigurePlanUpdateBriefRequest",
 ]

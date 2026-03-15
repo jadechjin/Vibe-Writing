@@ -2,6 +2,7 @@ import type { CSSProperties } from "react"
 
 import { EmptyEvidenceState } from "./EmptyEvidenceState"
 import { G0EvidencePanel } from "./G0EvidencePanel"
+import { G1EvidencePanel } from "./G1EvidencePanel"
 import type { WorkflowSnapshot, Blocker } from "../../hooks/useProjectStatus"
 
 // ---- Props ----
@@ -29,18 +30,18 @@ function resolveEvidenceContent(
   if (!gateKey) {
     return {
       title: "等待体系初始化",
-      description: "请先创建实验体系并完成体系定义，证据中枢将在工作流启动后激活。",
+      description: "请先创建实验体系并确认结构骨架，证据中枢将在工作流启动后激活。",
       nextAction: "创建实验体系",
-      hint: "体系定义完成后，将自动进入 Figure Plan 阶段。",
+      hint: "结构骨架确认后，将自动进入 Figure Plan 阶段。",
     }
   }
 
   switch (gateKey) {
     case "G0":
       return {
-        title: "等待体系定义",
-        description: "当前处于 G0 阶段，请完善实验体系基本信息，包括研究目标、实验方案与预期产出。",
-        nextAction: "完善体系定义",
+        title: "等待结构骨架确认",
+        description: "当前处于 G0 阶段，请上传模板文献并确认论文结构骨架。",
+        nextAction: "确认结构骨架",
         hint: "通过 G0 后将解锁 Figure Plan 入口。",
       }
     case "G1":
@@ -160,6 +161,8 @@ export function EvidenceHub({ snapshot, latestBlockers, gateKey, systemId }: Evi
     <div style={containerStyle}>
       {gateKey === "G0" && systemId ? (
         <G0EvidencePanel systemId={systemId} />
+      ) : gateKey === "G1" && systemId ? (
+        <G1EvidencePanel systemId={systemId} />
       ) : (
         <EmptyEvidenceState
           title={content.title}
