@@ -195,7 +195,8 @@ class FigurePlanChatSession(UUIDPrimaryKeyMixin, AuditMixin, Base):
         UniqueConstraint(
             "figure_plan_id",
             "provider",
-            name="uq_figure_plan_chat_sessions_plan_provider",
+            "scope",
+            name="uq_figure_plan_chat_sessions_plan_provider_scope",
         ),
     )
 
@@ -205,6 +206,12 @@ class FigurePlanChatSession(UUIDPrimaryKeyMixin, AuditMixin, Base):
         nullable=False,
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    scope: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="planning",
+        server_default=text("'planning'"),
+    )
     provider_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     work_dir: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")

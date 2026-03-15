@@ -42,7 +42,7 @@ const figurePlanAssetKeys = {
 }
 
 const chatKeys = {
-  messages: (planId: string, provider: string) => ["figure-plan-chat", planId, provider] as const,
+  messages: (planId: string, provider: string, scope: string) => ["figure-plan-chat", planId, provider, scope] as const,
 }
 
 // ---------------------------------------------------------------------------
@@ -94,12 +94,12 @@ export function useDeleteFigurePlanAsset(planId: string) {
 // FigurePlanChat hooks
 // ---------------------------------------------------------------------------
 
-export function useChatMessages(planId: string, provider: string) {
+export function useChatMessages(planId: string, provider: string, scope: string = "planning") {
   return useQuery({
-    queryKey: chatKeys.messages(planId, provider),
+    queryKey: chatKeys.messages(planId, provider, scope),
     queryFn: () =>
       apiRequest<ChatMessageDetail[]>(`/figure-plans/${planId}/chat/messages`, {
-        query: { provider },
+        query: { provider, scope },
       }),
     enabled: !!planId && !!provider,
   })
@@ -117,12 +117,13 @@ export async function sendChatMessageStream(
   content: string,
   callbacks: ChatStreamCallbacks,
   signal?: AbortSignal,
+  scope: string = "planning",
 ): Promise<void> {
   const url = `${API_BASE_URL}/figure-plans/${planId}/chat/messages`
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, content }),
+    body: JSON.stringify({ provider, content, scope }),
     signal,
   })
 

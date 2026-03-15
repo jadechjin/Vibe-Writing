@@ -452,10 +452,12 @@ async def create_chat_session(
     *,
     figure_plan_id: str,
     provider: str,
+    scope: str = "planning",
 ) -> FigurePlanChatSession:
     chat_session = FigurePlanChatSession(
         figure_plan_id=figure_plan_id,
         provider=provider,
+        scope=scope,
     )
     session.add(chat_session)
     await _maybe_await(session.flush())
@@ -466,12 +468,14 @@ async def get_active_chat_session(
     session: SessionLike,
     figure_plan_id: str,
     provider: str,
+    scope: str = "planning",
 ) -> FigurePlanChatSession | None:
     statement = (
         select(FigurePlanChatSession)
         .where(
             FigurePlanChatSession.figure_plan_id == figure_plan_id,
             FigurePlanChatSession.provider == provider,
+            FigurePlanChatSession.scope == scope,
             FigurePlanChatSession.status == "active",
         )
         .order_by(FigurePlanChatSession.created_at.desc())

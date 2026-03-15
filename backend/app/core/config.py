@@ -1,7 +1,10 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEFAULT_UPLOAD_DIR = Path(__file__).resolve().parents[3] / ".tmp"
 
 
 class Settings(BaseSettings):
@@ -17,6 +20,7 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "thesis-assets"
     websocket_channel: str = "tasks"
+    upload_dir: str = str(_DEFAULT_UPLOAD_DIR)
 
     model_config = SettingsConfigDict(
         env_file=".env",

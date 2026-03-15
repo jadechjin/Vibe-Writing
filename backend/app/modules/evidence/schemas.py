@@ -165,11 +165,19 @@ class ChatMessageDetail(CamelModel):
 class ChatMessageCreateRequest(CamelModel):
     provider: ChatProvider
     content: str
+    scope: str = Field(default="planning", min_length=1, max_length=50)
+
+
+class ChatImageUploadResponse(CamelModel):
+    local_path: str
+    file_name: str
+    preview_url: str | None = None
 
 
 __all__ = [
     "BatchApproveClaimsRequest",
     "BatchApproveClaimsResponse",
+    "ChatImageUploadResponse",
     "ChatMessageCreateRequest",
     "ChatMessageDetail",
     "ChatProvider",

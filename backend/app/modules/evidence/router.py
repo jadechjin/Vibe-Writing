@@ -18,6 +18,7 @@ from app.modules.assets.schemas import (
 from app.modules.evidence.schemas import (
     BatchApproveClaimsRequest,
     BatchApproveClaimsResponse,
+    ChatImageUploadResponse,
     ChatMessageCreateRequest,
     ChatMessageDetail,
     ChatProvider,
@@ -94,6 +95,9 @@ from app.modules.evidence.service import (
 )
 from app.modules.evidence.service import (
     update_figure_plan_brief as update_figure_plan_brief_service,
+)
+from app.modules.evidence.service import (
+    upload_chat_image as upload_chat_image_service,
 )
 from app.modules.evidence.service import (
     upload_figure_plan_asset as upload_figure_plan_asset_service,
@@ -366,8 +370,28 @@ async def trigger_figure_plan_analysis(
 
 
 # ---------------------------------------------------------------------------
-# FigurePlanChat routes (G1 – agent chat)
+# FigurePlanChat routes (G1/G2 – agent chat)
 # ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/figure-plans/{plan_id}/chat/upload-image",
+    response_model=ApiResponse[ChatImageUploadResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_chat_image(
+    plan_id: str,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ChatImageUploadResponse]:
+    result = await upload_chat_image_service(
+        session,
+        plan_id,
+        file_obj=file.file,
+        file_name=file.filename or "unknown",
+        content_type=file.content_type or "application/octet-stream",
+    )
+    return ApiResponse(data=result)
 
 
 @router.post("/figure-plans/{plan_id}/chat/messages")
@@ -381,6 +405,7 @@ async def send_chat_message(
         plan_id,
         payload.provider.value,
         payload.content,
+        payload.scope,
     )
     return StreamingResponse(
         stream,
@@ -396,11 +421,13 @@ async def send_chat_message(
 async def list_chat_messages(
     plan_id: str,
     provider: ChatProvider = Query(...),
+    scope: str = Query(default="planning", min_length=1, max_length=50),
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[list[ChatMessageDetail]]:
     messages = await list_chat_messages_for_plan_service(
         session,
         plan_id,
         provider.value,
+        scope,
     )
     return ApiResponse(data=messages)

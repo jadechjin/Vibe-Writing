@@ -155,10 +155,11 @@ def _seed_uploaded_asset(session: Session, plan: FigurePlan, *, project_id: str)
     session.flush()
 
 
-def _seed_busy_session(session: Session, plan: FigurePlan) -> None:
+def _seed_busy_session(session: Session, plan: FigurePlan, *, scope: str = "planning") -> None:
     chat_session = FigurePlanChatSession(
         figure_plan_id=plan.id,
         provider="claude",
+        scope=scope,
         status="active",
     )
     session.add(chat_session)

@@ -6,7 +6,10 @@ from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from inspect import isawaitable
 from io import SEEK_END
+from pathlib import Path
+from shutil import copyfileobj
 from typing import Any, BinaryIO, TypeVar
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -16,7 +19,8 @@ from sqlalchemy.orm import Session
 from app.common.enums import EventType, GateKey, TaskStatus
 from app.common.errors import ErrorCode
 from app.common.events import TaskEvent
-from app.common.storage import generate_presigned_url
+from app.common.storage import generate_presigned_url, upload_fileobj
+from app.core.config import get_settings
 from app.core.exceptions import AppException
 from app.modules.assets.schemas import (
     AnalysisRunSummary,
@@ -37,6 +41,7 @@ from app.modules.evidence.chat_provider import (
 )
 from app.modules.evidence.schemas import (
     BatchApproveClaimsResponse,
+    ChatImageUploadResponse,
     ChatMessageDetail,
     ClaimApproveRequest,
     ClaimDetail,
@@ -76,6 +81,8 @@ SessionLike = AsyncSession | Session
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+CHAT_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 
 EVIDENCE_TASK_START_DELAY_SECONDS = 0.05
 
@@ -1353,6 +1360,61 @@ async def batch_approve_claims(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_upload_dir() -> Path:
+    upload_dir = Path(get_settings().upload_dir).expanduser()
+    if not upload_dir.is_absolute():
+        upload_dir = _PROJECT_ROOT / upload_dir
+    return upload_dir
+
+
+def _get_chat_image_dir(plan_id: str) -> Path:
+    return _resolve_upload_dir() / "chat-images" / plan_id
+
+
+def _save_chat_image_locally(file_obj: BinaryIO, *, plan_id: str, file_name: str) -> Path:
+    suffix = Path(file_name).suffix
+    chat_image_dir = _get_chat_image_dir(plan_id)
+    chat_image_dir.mkdir(parents=True, exist_ok=True)
+    local_path = chat_image_dir / f"{uuid4().hex}{suffix}"
+    file_obj.seek(0)
+    with local_path.open("wb") as out:
+        copyfileobj(file_obj, out)
+    file_obj.seek(0)
+    return local_path.resolve()
+
+
+def _list_local_chat_images(plan_id: str) -> list[Path]:
+    chat_image_dir = _get_chat_image_dir(plan_id)
+    if not chat_image_dir.exists():
+        return []
+    return sorted(
+        [p.resolve() for p in chat_image_dir.iterdir() if p.is_file()],
+        key=lambda p: (p.stat().st_mtime, p.name.lower()),
+    )
+
+
+def _validate_image_upload(
+    file_obj: BinaryIO, *, file_name: str, content_type: str, plan_id: str,
+) -> None:
+    if not content_type.startswith("image/"):
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message="Only image files are allowed",
+            status_code=400,
+            details={"content_type": content_type, "plan_id": plan_id},
+        )
+    file_obj.seek(0, SEEK_END)
+    size = file_obj.tell()
+    file_obj.seek(0)
+    if size > CHAT_IMAGE_MAX_BYTES:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message="File size exceeds 10MB limit",
+            status_code=400,
+            details={"file_name": file_name, "size": size, "plan_id": plan_id},
+        )
+
+
 async def upload_figure_plan_asset(
     session: SessionLike,
     plan_id: str,
@@ -1362,24 +1424,9 @@ async def upload_figure_plan_asset(
     content_type: str,
     role: str = "source_image",
 ) -> FigurePlanAssetDetail:
-    if not content_type.startswith("image/"):
-        raise AppException(
-            code=ErrorCode.VALIDATION_ERROR.value,
-            message="Only image files are allowed",
-            status_code=400,
-            details={"content_type": content_type, "plan_id": plan_id},
-        )
-
-    file_obj.seek(0, SEEK_END)
-    size = file_obj.tell()
-    file_obj.seek(0)
-    if size > 10 * 1024 * 1024:
-        raise AppException(
-            code=ErrorCode.VALIDATION_ERROR.value,
-            message="File size exceeds 10MB limit",
-            status_code=400,
-            details={"file_name": file_name, "size": size, "plan_id": plan_id},
-        )
+    _validate_image_upload(
+        file_obj, file_name=file_name, content_type=content_type, plan_id=plan_id,
+    )
 
     plan = await repository.get_figure_plan(session, plan_id)
     if plan is None:
@@ -1413,6 +1460,41 @@ async def upload_figure_plan_asset(
 
     preview_url = _safe_presigned_url(asset.storage_key)
     return _build_figure_plan_asset_detail(binding, asset, preview_url)
+
+
+async def upload_chat_image(
+    session: SessionLike,
+    plan_id: str,
+    *,
+    file_obj: BinaryIO,
+    file_name: str,
+    content_type: str,
+) -> ChatImageUploadResponse:
+    _validate_image_upload(
+        file_obj, file_name=file_name, content_type=content_type, plan_id=plan_id,
+    )
+
+    plan = await repository.get_figure_plan(session, plan_id)
+    if plan is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Figure plan not found",
+            status_code=404,
+            details={"plan_id": plan_id},
+        )
+
+    local_path = _save_chat_image_locally(file_obj, plan_id=plan_id, file_name=file_name)
+
+    preview_url: str | None = None
+    try:
+        storage_key = upload_fileobj(file_obj, file_name, content_type)
+        preview_url = _safe_presigned_url(storage_key)
+    except Exception:
+        logger.warning("Failed to sync chat image to object storage for %s", plan_id, exc_info=True)
+
+    return ChatImageUploadResponse(
+        local_path=str(local_path), file_name=file_name, preview_url=preview_url,
+    )
 
 
 async def list_figure_plan_assets(
@@ -1496,6 +1578,7 @@ async def list_chat_messages_for_plan(
     session: SessionLike,
     plan_id: str,
     provider: str,
+    scope: str = "planning",
 ) -> list[ChatMessageDetail]:
     plan = await repository.get_figure_plan(session, plan_id)
     if plan is None:
@@ -1506,7 +1589,7 @@ async def list_chat_messages_for_plan(
             details={"plan_id": plan_id},
         )
 
-    chat_session = await repository.get_active_chat_session(session, plan_id, provider)
+    chat_session = await repository.get_active_chat_session(session, plan_id, provider, scope)
     if chat_session is None:
         return []
 
@@ -1519,6 +1602,7 @@ async def send_chat_message_stream(
     plan_id: str,
     provider_name: str,
     content: str,
+    scope: str = "planning",
 ) -> AsyncGenerator[str, None]:
     plan = await repository.get_figure_plan(session, plan_id)
     if plan is None:
@@ -1539,10 +1623,10 @@ async def send_chat_message_stream(
             status_code=422,
             details={"provider": provider_value},
         ) from exc
-    chat_session = await _get_or_create_chat_session(session, plan_id, provider_value)
+    chat_session = await _get_or_create_chat_session(session, plan_id, provider_value, scope)
 
     if await repository.is_chat_session_busy(session, chat_session.id):
-        raise _build_chat_conflict(plan_id, provider_value)
+        raise _build_chat_conflict(plan_id, provider_value, scope)
 
     try:
         turn_index = await repository.get_next_turn_index(session, chat_session.id)
@@ -1566,7 +1650,7 @@ async def send_chat_message_stream(
         await _maybe_await(session.commit())
     except IntegrityError as exc:
         await _maybe_await(session.rollback())
-        raise _build_chat_conflict(plan_id, provider_value) from exc
+        raise _build_chat_conflict(plan_id, provider_value, scope) from exc
 
     context = await _build_context_prompt(session, plan_id)
 
@@ -1638,8 +1722,9 @@ async def _get_or_create_chat_session(
     session: SessionLike,
     plan_id: str,
     provider: str,
+    scope: str = "planning",
 ) -> FigurePlanChatSession:
-    chat_session = await repository.get_active_chat_session(session, plan_id, provider)
+    chat_session = await repository.get_active_chat_session(session, plan_id, provider, scope)
     if chat_session is not None:
         return chat_session
 
@@ -1648,23 +1733,24 @@ async def _get_or_create_chat_session(
             session,
             figure_plan_id=plan_id,
             provider=provider,
+            scope=scope,
         )
         await _maybe_await(session.commit())
         return chat_session
     except IntegrityError:
         await _maybe_await(session.rollback())
-        chat_session = await repository.get_active_chat_session(session, plan_id, provider)
+        chat_session = await repository.get_active_chat_session(session, plan_id, provider, scope)
         if chat_session is None:
             raise
         return chat_session
 
 
-def _build_chat_conflict(plan_id: str, provider: str) -> AppException:
+def _build_chat_conflict(plan_id: str, provider: str, scope: str = "planning") -> AppException:
     return AppException(
         code=ErrorCode.CONFLICT.value,
         message="Another message is being processed for this session. Please wait.",
         status_code=409,
-        details={"plan_id": plan_id, "provider": provider},
+        details={"plan_id": plan_id, "provider": provider, "scope": scope},
     )
 
 
@@ -1704,6 +1790,13 @@ async def _build_context_prompt(session: SessionLike, plan_id: str) -> str:
             context_parts.append(
                 f"- {asset.file_name} (uploaded at {uploaded_at})"
             )
+
+    local_chat_images = _list_local_chat_images(plan_id)
+    if local_chat_images:
+        context_parts.append("")
+        context_parts.append("## Local Chat Image Paths:")
+        for path in local_chat_images:
+            context_parts.append(f"- {path.name}: {path}")
 
     return "\n".join(context_parts)
 
@@ -1752,5 +1845,6 @@ __all__ = [
     "trigger_figure_plan_analysis",
     "transition_figure_plan_status",
     "update_figure_plan_brief",
+    "upload_chat_image",
     "upload_figure_plan_asset",
 ]

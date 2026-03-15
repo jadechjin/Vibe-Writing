@@ -71,14 +71,14 @@ def test_chat_models_define_expected_constraints() -> None:
         if isinstance(constraint, UniqueConstraint)
     }
 
-    assert "uq_figure_plan_chat_sessions_plan_provider" in _unique_constraint_names(
+    assert "uq_figure_plan_chat_sessions_plan_provider_scope" in _unique_constraint_names(
         FigurePlanChatSession
     )
-    assert ("figure_plan_id", "provider") in session_constraints
+    assert ("figure_plan_id", "provider", "scope") in session_constraints
     assert "ix_figure_plan_chat_messages_session_turn" in _index_names(FigurePlanChatMessage)
 
 
-def test_chat_session_unique_constraint_rejects_duplicate_provider_per_plan() -> None:
+def test_chat_session_unique_constraint_rejects_duplicate_provider_scope_per_plan() -> None:
     engine = _sqlite_memory_engine()
     Base.metadata.create_all(
         engine,
@@ -96,6 +96,7 @@ def test_chat_session_unique_constraint_rejects_duplicate_provider_per_plan() ->
             FigurePlanChatSession(
                 figure_plan_id=plan.id,
                 provider="claude",
+                scope="planning",
                 status="active",
             )
         )
@@ -105,11 +106,46 @@ def test_chat_session_unique_constraint_rejects_duplicate_provider_per_plan() ->
             FigurePlanChatSession(
                 figure_plan_id=plan.id,
                 provider="claude",
+                scope="planning",
                 status="active",
             )
         )
         with pytest.raises(IntegrityError):
             session.flush()
+
+
+def test_chat_session_allows_same_provider_with_different_scopes() -> None:
+    engine = _sqlite_memory_engine()
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Project.__table__,
+            ExperimentalSystem.__table__,
+            FigurePlan.__table__,
+            FigurePlanChatSession.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        plan = _seed_chat_context(session)
+        session.add(
+            FigurePlanChatSession(
+                figure_plan_id=plan.id,
+                provider="claude",
+                scope="planning",
+                status="active",
+            )
+        )
+        session.flush()
+        session.add(
+            FigurePlanChatSession(
+                figure_plan_id=plan.id,
+                provider="claude",
+                scope="analysis",
+                status="active",
+            )
+        )
+        session.flush()  # Should not raise
 
 
 def test_chat_message_unique_index_rejects_duplicate_turn_index_per_session() -> None:
