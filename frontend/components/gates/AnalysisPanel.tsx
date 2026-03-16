@@ -160,7 +160,7 @@ export function AnalysisPanel({ systemId, snapshot, blockers }: GateContentPanel
           <div style={cardGridStyle}>
             {items.map((item, idx) => {
               const firstAsset = item.assets[0]
-              const isAnalyzed = !!item.latestAnalysis
+              const isAnalyzed = !!item.latestAnalysis || !!item.evidenceText
               return (
                 <div key={item.figurePlanId} style={imageCardStyle}
                   onClick={() => handleCardClick(idx)}
@@ -210,6 +210,7 @@ export function AnalysisPanel({ systemId, snapshot, blockers }: GateContentPanel
       {/* Overlay */}
       {overlayOpen && items.length > 0 ? (
         <AnalysisOverlay
+          systemId={systemId}
           items={items}
           selectedIndex={selectedIndex}
           onChangeIndex={setSelectedIndex}

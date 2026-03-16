@@ -47,6 +47,8 @@ class FigurePlan(UUIDPrimaryKeyMixin, AuditMixin, Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    data_question: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class FigurePlanAsset(UUIDPrimaryKeyMixin, AuditMixin, Base):

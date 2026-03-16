@@ -9,7 +9,7 @@ export type G2EvidencePanelProps = Readonly<{
 }>
 
 function getAnalysisStatus(item: ImageAnalysisItem): "analyzed" | "pending" {
-  return item.latestAnalysis ? "analyzed" : "pending"
+  return item.latestAnalysis || item.evidenceText ? "analyzed" : "pending"
 }
 
 const containerStyle: CSSProperties = {

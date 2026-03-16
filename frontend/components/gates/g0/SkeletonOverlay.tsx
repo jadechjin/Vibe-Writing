@@ -419,6 +419,7 @@ function FigureFrameworkEditForm({ item, onSave, onCancel, isSaving }: {
   const [purpose, setPurpose] = useState(String(item.purpose ?? ""))
   const [dataSource, setDataSource] = useState(String(item.data_source ?? ""))
   const [dataPrep, setDataPrep] = useState(String(item.data_preparation ?? ""))
+  const [dataQuestion, setDataQuestion] = useState(String(item.data_question ?? ""))
   return (
     <>
       <div style={{ display: "flex", gap: "8px" }}>
@@ -439,10 +440,12 @@ function FigureFrameworkEditForm({ item, onSave, onCancel, isSaving }: {
         <input style={inlineInputStyle} value={dataSource} onChange={(e) => setDataSource(e.target.value)} /></div>
       <div style={inlineFieldBlock}><div style={inlineFieldLabel}>数据准备</div>
         <textarea style={inlineTextareaStyle} value={dataPrep} onChange={(e) => setDataPrep(e.target.value)} /></div>
+      <div style={inlineFieldBlock}><div style={inlineFieldLabel}>数据问题</div>
+        <textarea style={inlineTextareaStyle} value={dataQuestion} onChange={(e) => setDataQuestion(e.target.value)} placeholder="这张图需要回答的具体数据问题" /></div>
       <div style={inlineActionRow}>
         <button type="button" style={inlineCancelBtnStyle} onClick={onCancel}>取消</button>
         <button type="button" style={isSaving ? { ...inlineSaveBtnStyle, ...btnDisabled } : inlineSaveBtnStyle}
-          disabled={isSaving} onClick={() => onSave({ ...item, figure_id: figureId, title, type, importance, purpose, data_source: dataSource, data_preparation: dataPrep })}>
+          disabled={isSaving} onClick={() => onSave({ ...item, figure_id: figureId, title, type, importance, purpose, data_source: dataSource, data_preparation: dataPrep, data_question: dataQuestion })}>
           {isSaving ? "保存中..." : "保存"}</button>
       </div>
     </>
@@ -685,6 +688,12 @@ function renderFigureFramework(data: unknown, ep: InlineEditProps): ReactNode {
         <div style={{ marginTop: "4px" }}>
           <span style={subLabelStyle}>数据准备：</span>
           <span style={{ fontSize: "12px", color: "#a5b4fc" }}>{String(f.data_preparation)}</span>
+        </div>
+      ) : null}
+      {f.data_question ? (
+        <div style={{ marginTop: "4px" }}>
+          <span style={subLabelStyle}>数据问题：</span>
+          <span style={{ fontSize: "12px", color: "#fbbf24" }}>{String(f.data_question)}</span>
         </div>
       ) : null}
     </EditableCard>

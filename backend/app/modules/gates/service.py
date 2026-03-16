@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.common.enums import GATE_REQUIREMENTS, GateKey, GateRequirementKey, SystemState, TaskStatus
 from app.common.schemas import Blocker, GateReview
-from app.persistence.models.asset import Asset, AssetMetadata
+from app.persistence.models.asset import Asset
 from app.persistence.models.draft import Outline, OutlineAssetBinding, SectionDraft
 from app.persistence.models.evidence import (
     AnalysisRun,
@@ -185,7 +185,8 @@ def check_data_and_analysis_ready(session: Session, system: ExperimentalSystem) 
                 AnalysisRun.status == TaskStatus.SUCCEEDED.value,
             ).limit(1)
         )
-        if not has_analysis:
+        has_evidence_text = bool(plan.evidence_text and plan.evidence_text.strip())
+        if not has_analysis and not has_evidence_text:
             unanalyzed.append(plan.figure_no)
 
     if unanalyzed:
@@ -208,53 +209,82 @@ def check_data_and_analysis_ready(session: Session, system: ExperimentalSystem) 
 
 
 def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list[Blocker]:
+    blockers: list[Blocker] = []
+
+    # --- Manifest status check ---
     manifests = session.scalars(
         select(AssetManifest).where(AssetManifest.system_id == system.id)
     ).all()
     latest_manifest = _latest_single_by_version(manifests)
     manifest_status = latest_manifest.status if latest_manifest is not None else None
 
-    assets = session.scalars(select(Asset).where(Asset.system_id == system.id)).all()
-    asset_ids = [asset.id for asset in assets]
-    metadata_entries = (
-        session.scalars(select(AssetMetadata).where(AssetMetadata.asset_id.in_(asset_ids))).all()
-        if asset_ids
-        else []
-    )
-    metadata_by_asset_id = {entry.asset_id: entry for entry in metadata_entries}
-
-    missing_metadata_asset_ids = [
-        asset.id
-        for asset in assets
-        if not _has_text(getattr(metadata_by_asset_id.get(asset.id), "semantic_description", None))
-    ]
-    pending_qc_asset_ids = [
-        asset.id
-        for asset in assets
-        if not _is_confirmed_status(getattr(metadata_by_asset_id.get(asset.id), "qc_status", None))
-    ]
-
-    if (
-        _is_confirmed_status(manifest_status)
-        and not missing_metadata_asset_ids
-        and not pending_qc_asset_ids
-    ):
-        return []
-
-    return [
-        _build_blocker(
-            code="assets_not_confirmed",
-            message="Assets are not confirmed.",
-            gate=GateKey.G3,
-            current_state=system.status,
-            required_checks=[GateRequirementKey.ASSETS_CONFIRMED],
-            details={
-                "manifest_status": manifest_status,
-                "missing_metadata_asset_ids": missing_metadata_asset_ids,
-                "pending_qc_asset_ids": pending_qc_asset_ids,
-            },
+    if not _is_confirmed_status(manifest_status):
+        blockers.append(
+            _build_blocker(
+                code="manifest_not_confirmed",
+                message="Manifest is not confirmed.",
+                gate=GateKey.G3,
+                current_state=system.status,
+                required_checks=[GateRequirementKey.ASSETS_CONFIRMED],
+                details={"manifest_status": manifest_status},
+            )
         )
-    ]
+
+    # --- FigurePlan completeness checks ---
+    plans = session.scalars(
+        select(FigurePlan).where(FigurePlan.system_id == system.id)
+    ).all()
+    latest_plans = _latest_by_version(plans, key=lambda p: p.figure_no)
+    confirmed_plans = [p for p in latest_plans if _is_confirmed_status(p.status)]
+
+    plans_missing_assets: list[str] = []
+    plans_missing_evidence: list[str] = []
+
+    for plan in confirmed_plans:
+        asset_count = session.scalar(
+            select(func.count(FigurePlanAsset.id)).where(
+                FigurePlanAsset.figure_plan_id == plan.id
+            )
+        )
+        if not asset_count or asset_count == 0:
+            plans_missing_assets.append(plan.figure_no)
+            continue
+
+        has_evidence = bool(plan.evidence_text and plan.evidence_text.strip())
+        has_analysis = session.scalar(
+            select(AnalysisRun.id).where(
+                AnalysisRun.figure_plan_id == plan.id,
+                AnalysisRun.status == TaskStatus.SUCCEEDED.value,
+            ).limit(1)
+        )
+        if not has_evidence and not has_analysis:
+            plans_missing_evidence.append(plan.figure_no)
+
+    if plans_missing_assets:
+        blockers.append(
+            _build_blocker(
+                code="figure_plan_missing_assets",
+                message=f"{len(plans_missing_assets)} figure plan(s) have no associated images.",
+                gate=GateKey.G3,
+                current_state=system.status,
+                required_checks=[GateRequirementKey.ASSETS_CONFIRMED],
+                details={"figure_nos": plans_missing_assets},
+            )
+        )
+
+    if plans_missing_evidence:
+        blockers.append(
+            _build_blocker(
+                code="figure_plan_missing_evidence",
+                message=f"{len(plans_missing_evidence)} figure plan(s) have no analysis conclusion.",
+                gate=GateKey.G3,
+                current_state=system.status,
+                required_checks=[GateRequirementKey.ASSETS_CONFIRMED],
+                details={"figure_nos": plans_missing_evidence},
+            )
+        )
+
+    return blockers
 
 
 def check_evidence_and_outline_ready(session: Session, system: ExperimentalSystem) -> list[Blocker]:

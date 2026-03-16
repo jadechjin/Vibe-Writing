@@ -475,6 +475,7 @@ The output MUST be valid JSON with this exact schema:
       "type": "chart|diagram|table|image",
       "data_source": "Which analysis method produces this",
       "purpose": "What argument this figure supports",
+      "data_question": "The specific data question this figure must answer (e.g. Is the conversion rate significantly different across temperature conditions?)",
       "importance": "high|medium|low",
       "data_preparation": "What raw data the user needs to prepare for this figure",
       "related_sections": ["section_key_1"],
@@ -513,7 +514,9 @@ require, and which questions they address. Describe the data-to-evidence flow.
 Each figure must link to a section and a research question. \
 Rate each figure's importance (high/medium/low) based on its role in the argument. \
 Describe what raw data the user needs to prepare (data_preparation) so they know \
-what to collect or generate before the figure can be produced.
+what to collect or generate before the figure can be produced. \
+Add a data_question for each figure: a specific, concrete question that the \
+figure's data should answer, bridging raw data and written narrative.
 - argument_chains: For each section, define what claim it makes, what evidence \
 supports it, and what reasoning pattern is used.
 - cross_experiment_links: Map how different sections/experiments relate to \

@@ -25,6 +25,8 @@ export type FigurePlanDetail = {
   skeletonVersion: number | null
   briefText: string | null
   briefConfirmedAt: string | null
+  dataQuestion: string | null
+  evidenceText: string | null
   createdAt: string
   updatedAt: string
 }
@@ -42,6 +44,8 @@ export type FigurePlanPatchInput = {
   methodJson?: Record<string, unknown>
   acceptanceCriteriaJson?: Array<Record<string, unknown>> | Record<string, unknown>
   briefText?: string | null
+  dataQuestion?: string | null
+  evidenceText?: string | null
 }
 
 const figurePlanKeys = {
@@ -100,6 +104,7 @@ export function usePatchFigurePlan(systemId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: figurePlanKeys.list(systemId) })
       queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
+      queryClient.invalidateQueries({ queryKey: ["image-analyses"] })
       // Skeleton figure_framework may have been updated by the backend sync
       queryClient.invalidateQueries({ queryKey: ["skeletons", systemId] })
       queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "skeleton" })

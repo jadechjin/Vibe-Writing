@@ -304,6 +304,36 @@ export function AnalysisChat({ planId, onAnalysisComplete }: AnalysisChatProps) 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
+
+    // Handle library asset drag (from FigurePlanUpload / AnalysisOverlay)
+    const assetData = e.dataTransfer.getData("application/x-vibe-asset")
+    if (assetData) {
+      try {
+        const asset = JSON.parse(assetData) as { previewUrl?: string; localPath?: string; fileName?: string }
+        if (asset.previewUrl) {
+          // Fetch the image from previewUrl and upload it to get a local path
+          fetch(asset.previewUrl)
+            .then((res) => res.blob())
+            .then((blob) => {
+              const file = new File([blob], asset.fileName || "image.png", { type: blob.type })
+              addImages([file])
+            })
+            .catch(() => {
+              // Fallback: add as pending with previewUrl only
+              setPendingImages((prev) => [...prev, {
+                id: nextImgId(),
+                file: new File([], asset.fileName || "image.png"),
+                blobUrl: asset.previewUrl!,
+                localPath: asset.localPath || null,
+                uploading: false,
+                error: null,
+              }])
+            })
+          return
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
     const files = Array.from(e.dataTransfer.files)
     addImages(files)
   }, [addImages])
@@ -338,7 +368,7 @@ export function AnalysisChat({ planId, onAnalysisComplete }: AnalysisChatProps) 
     abortRef.current = controller
 
     try {
-      await sendChatMessageStream(planId, provider, text.trim(), {
+      await sendChatMessageStream(planId, provider, fullText, {
         onDelta: (chunk) => setStreamingText((prev) => prev + chunk),
         onDone: () => { onAnalysisComplete?.() },
         onError: (err) => setError(err),

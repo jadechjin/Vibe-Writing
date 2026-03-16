@@ -23,6 +23,7 @@ from app.modules.assets.schemas import (
     ManifestCreateAcceptedResponse,
     ManifestCreateRequest,
     ManifestDetail,
+    ManifestPreviewResponse,
 )
 from app.modules.assets.service import (
     MANIFEST_TASK_START_DELAY_SECONDS,
@@ -31,11 +32,13 @@ from app.modules.assets.service import (
     complete_analysis_run as complete_analysis_run_service,
     confirm_asset_qc as confirm_asset_qc_service,
     confirm_manifest as confirm_manifest_service,
+    confirm_manifest_from_preview as confirm_manifest_from_preview_service,
     create_analysis_run as create_analysis_run_service,
     create_manifest as create_manifest_service,
     delete_asset as delete_asset_service,
     get_asset_detail as get_asset_detail_service,
     get_latest_manifest as get_latest_manifest_service,
+    get_manifest_preview as get_manifest_preview_service,
     get_manifest_task_session_bind,
     list_analysis_runs as list_analysis_runs_service,
     list_assets_for_system as list_assets_for_system_service,
@@ -131,6 +134,18 @@ async def get_latest_manifest(
     return ApiResponse(data=manifest)
 
 
+@router.get(
+    "/systems/{system_id}/manifest-preview",
+    response_model=ApiResponse[ManifestPreviewResponse],
+)
+async def get_manifest_preview(
+    system_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ManifestPreviewResponse]:
+    preview = await get_manifest_preview_service(session, system_id)
+    return ApiResponse(data=preview)
+
+
 @router.post(
     "/systems/{system_id}/manifest",
     response_model=ApiResponse[ManifestCreateAcceptedResponse],
@@ -220,6 +235,18 @@ async def confirm_manifest(
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[ManifestConfirmResponse]:
     result = await confirm_manifest_service(session, manifest_id)
+    return ApiResponse(data=result)
+
+
+@router.post(
+    "/systems/{system_id}/manifest-confirm",
+    response_model=ApiResponse[ManifestConfirmResponse],
+)
+async def confirm_manifest_from_preview(
+    system_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ManifestConfirmResponse]:
+    result = await confirm_manifest_from_preview_service(session, system_id)
     return ApiResponse(data=result)
 
 

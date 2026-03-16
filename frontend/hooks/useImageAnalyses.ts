@@ -24,6 +24,8 @@ export type ImageAnalysisItem = {
   figureNo: string
   title: string
   sectionKey: string | null
+  dataQuestion: string | null
+  evidenceText: string | null
   assets: ImageAssetDetail[]
   latestAnalysis: AnalysisRunSummary | null
 }

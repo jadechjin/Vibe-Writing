@@ -1,12 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, type CSSProperties } from "react"
+import { useCallback, useEffect, useState, type CSSProperties } from "react"
 
 import type { ImageAnalysisItem } from "../../../hooks/useImageAnalyses"
+import { usePatchFigurePlan } from "../../../hooks/useFigurePlan"
 import { AnalysisChat } from "./AnalysisChat"
 import { LiteraturePanel } from "./LiteraturePanel"
 
 type AnalysisOverlayProps = Readonly<{
+  systemId: string
   items: ImageAnalysisItem[]
   selectedIndex: number
   onChangeIndex: (index: number) => void
@@ -87,7 +89,7 @@ const metaCardStyle: CSSProperties = {
 const metaLabelStyle: CSSProperties = { fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }
 const metaValueStyle: CSSProperties = { fontSize: "12px", color: "#e2e8f0" }
 
-export function AnalysisOverlay({ items, selectedIndex, onChangeIndex, onClose }: AnalysisOverlayProps) {
+export function AnalysisOverlay({ systemId, items, selectedIndex, onChangeIndex, onClose }: AnalysisOverlayProps) {
   const item = items[selectedIndex]
   const hasPrev = selectedIndex > 0
   const hasNext = selectedIndex < items.length - 1
@@ -111,8 +113,9 @@ export function AnalysisOverlay({ items, selectedIndex, onChangeIndex, onClose }
 
   if (!item) return null
 
-  const statusBadge = item.latestAnalysis ? "已分析" : "待分析"
-  const badgeColor = item.latestAnalysis ? "#4ade80" : "#fb923c"
+  const isAnalyzed = !!item.latestAnalysis || !!item.evidenceText
+  const statusBadge = isAnalyzed ? "已分析" : "待分析"
+  const badgeColor = isAnalyzed ? "#4ade80" : "#fb923c"
 
   return (
     <div style={backdropStyle} onClick={onClose}>
@@ -128,8 +131,8 @@ export function AnalysisOverlay({ items, selectedIndex, onChangeIndex, onClose }
               图片分析 — {item.figureNo} {item.title}
             </div>
             <span style={{ fontSize: "11px", fontWeight: 600, padding: "2px 8px", borderRadius: "6px",
-              background: item.latestAnalysis ? "rgba(34,197,94,0.15)" : "rgba(251,146,60,0.15)",
-              color: badgeColor, border: `1px solid ${item.latestAnalysis ? "rgba(34,197,94,0.2)" : "rgba(251,146,60,0.2)"}` }}>
+              background: isAnalyzed ? "rgba(34,197,94,0.15)" : "rgba(251,146,60,0.15)",
+              color: badgeColor, border: `1px solid ${isAnalyzed ? "rgba(34,197,94,0.2)" : "rgba(251,146,60,0.2)"}` }}>
               {statusBadge}
             </span>
           </div>
@@ -142,8 +145,15 @@ export function AnalysisOverlay({ items, selectedIndex, onChangeIndex, onClose }
           <div style={leftPanelStyle}>
             <div style={imageContainerStyle}>
               {firstAsset?.previewUrl ? (
-                <img src={firstAsset.previewUrl} alt={item.title}
-                  style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                <img
+                  src={firstAsset.previewUrl}
+                  alt={item.title}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("application/x-vibe-asset", JSON.stringify(firstAsset))
+                  }}
+                  style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", cursor: "grab" }}
+                />
               ) : (
                 <div style={{ color: "#64748b", fontSize: "13px" }}>暂无图片预览</div>
               )}
@@ -159,17 +169,89 @@ export function AnalysisOverlay({ items, selectedIndex, onChangeIndex, onClose }
             </div>
           </div>
 
-          {/* Right: Analysis Chat + Literature */}
+          {/* Right: Data Question + Analysis Chat + Evidence Text */}
           <div style={rightPanelStyle}>
+            {item.dataQuestion ? (
+              <div style={{ flexShrink: 0, marginBottom: "10px", padding: "8px 10px", borderRadius: "8px",
+                background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.15)" }}>
+                <div style={{ fontSize: "10px", color: "#fbbf24", fontWeight: 600, marginBottom: "3px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  数据问题（来自骨架）
+                </div>
+                <div style={{ fontSize: "12px", color: "#fde68a", lineHeight: 1.5 }}>{item.dataQuestion}</div>
+              </div>
+            ) : null}
             <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
               <AnalysisChat planId={item.figurePlanId} />
             </div>
-            <div style={{ borderTop: "1px solid rgba(148,163,184,0.1)", paddingTop: "12px", marginTop: "12px",
-              maxHeight: "35%", overflow: "auto" }}>
-              <LiteraturePanel analysisResult={null} />
-            </div>
+            <EvidenceTextEditor
+              key={item.figurePlanId}
+              systemId={systemId}
+              planId={item.figurePlanId}
+              initialText={item.evidenceText}
+            />
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+const evidenceSectionStyle: CSSProperties = {
+  flexShrink: 0, borderTop: "1px solid rgba(148,163,184,0.1)",
+  paddingTop: "10px", marginTop: "10px",
+}
+
+const evidenceLabelStyle: CSSProperties = {
+  fontSize: "10px", color: "#94a3b8", fontWeight: 600,
+  textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px",
+}
+
+const evidenceTextareaStyle: CSSProperties = {
+  width: "100%", padding: "8px 10px", borderRadius: "8px",
+  border: "1px solid rgba(148,163,184,0.16)", background: "rgba(15,23,42,0.6)",
+  color: "#e2e8f0", fontSize: "12px", resize: "vertical",
+  outline: "none", minHeight: "60px", maxHeight: "120px", lineHeight: 1.5,
+}
+
+const evidenceSaveBtnStyle: CSSProperties = {
+  padding: "4px 12px", borderRadius: "6px", fontSize: "11px", fontWeight: 600,
+  border: "1px solid rgba(74,222,128,0.4)", background: "rgba(22,101,52,0.15)",
+  color: "#4ade80", cursor: "pointer",
+}
+
+function EvidenceTextEditor({ systemId, planId, initialText }: {
+  systemId: string; planId: string; initialText: string | null
+}) {
+  const [text, setText] = useState(initialText ?? "")
+  const [saved, setSaved] = useState(false)
+  const patchMut = usePatchFigurePlan(systemId)
+
+  const handleSave = () => {
+    patchMut.mutate(
+      { planId, input: { evidenceText: text.trim() || null } },
+      { onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 2000) } },
+    )
+  }
+
+  return (
+    <div style={evidenceSectionStyle}>
+      <div style={evidenceLabelStyle}>分析结论</div>
+      <textarea
+        style={evidenceTextareaStyle}
+        value={text}
+        onChange={(e) => { setText(e.target.value); setSaved(false) }}
+        placeholder="在此填写对图片数据的分析结论，将图片中的数据细节转述为自然语言..."
+      />
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "6px", alignItems: "center" }}>
+        {saved ? <span style={{ fontSize: "11px", color: "#4ade80" }}>已保存</span> : null}
+        <button
+          type="button"
+          style={patchMut.isPending ? { ...evidenceSaveBtnStyle, opacity: 0.5, cursor: "not-allowed" } : evidenceSaveBtnStyle}
+          disabled={patchMut.isPending}
+          onClick={handleSave}
+        >
+          {patchMut.isPending ? "保存中..." : "保存结论"}
+        </button>
       </div>
     </div>
   )

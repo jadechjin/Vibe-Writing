@@ -300,6 +300,7 @@ async def complete_figure_plan_generation(
                 data_needed_json=[{"assetType": "figure"}],
                 method_json={"mode": "skeleton_driven"},
                 acceptance_criteria_json=[{"type": "status", "value": "confirmed"}],
+                data_question=fig.get("data_question"),
             )
             created_plans.append(plan)
 
@@ -413,6 +414,7 @@ async def list_image_analyses(
         run = latest_run_by_plan_id.get(plan.id)
         if run is not None:
             latest_analysis = _build_analysis_run_summary(run)
+        if run is not None or plan.evidence_text:
             analyzed += 1
 
         items.append(
@@ -421,6 +423,8 @@ async def list_image_analyses(
                 figure_no=plan.figure_no,
                 title=plan.title,
                 section_key=plan.section_key,
+                data_question=plan.data_question,
+                evidence_text=plan.evidence_text,
                 assets=assets_by_plan_id.get(plan.id, []),
                 latest_analysis=latest_analysis,
             )
@@ -598,7 +602,7 @@ async def _sync_figure_plan_to_skeleton(
     changed_fields: set[str],
 ) -> None:
     """Sync figure_no/title changes back to the skeleton's figure_framework."""
-    syncable = {"figure_no", "title", "claim_text"}
+    syncable = {"figure_no", "title", "claim_text", "data_question"}
     if not (changed_fields & syncable):
         logger.debug("_sync_figure_plan_to_skeleton: no syncable fields in %s", changed_fields)
         return
@@ -663,6 +667,8 @@ async def _sync_figure_plan_to_skeleton(
             entry["title"] = plan.title
         if "claim_text" in changed_fields:
             entry["purpose"] = plan.claim_text
+        if "data_question" in changed_fields:
+            entry["data_question"] = plan.data_question
         updated = True
         break
 

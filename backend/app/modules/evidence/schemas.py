@@ -37,6 +37,8 @@ class FigurePlanDetail(CamelModel):
     skeleton_version: int | None = None
     brief_text: str | None = None
     brief_confirmed_at: datetime | None = None
+    data_question: str | None = None
+    evidence_text: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -62,6 +64,8 @@ class FigurePlanPatchRequest(CamelModel):
     method_json: dict[str, Any] | None = None
     acceptance_criteria_json: list[dict[str, Any]] | dict[str, Any] | None = None
     brief_text: str | None = None
+    data_question: str | None = None
+    evidence_text: str | None = None
 
 
 class FigurePlanStatusTransitionRequest(CamelModel):

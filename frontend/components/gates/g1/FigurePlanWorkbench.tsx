@@ -226,6 +226,7 @@ type FigureFrameworkEntry = Readonly<{
   title: string
   type?: string
   importance?: string
+  dataQuestion?: string
 }>
 
 function normalizeFigureId(value: unknown): string | null {
@@ -252,6 +253,7 @@ function extractFigureFramework(
       title: title || figureId,
       type: typeof fig.type === "string" ? fig.type.trim() || undefined : undefined,
       importance: typeof fig.importance === "string" ? fig.importance.trim() || undefined : undefined,
+      dataQuestion: typeof fig.data_question === "string" ? fig.data_question.trim() || undefined : undefined,
     })
   }
   return [...entries.values()]
@@ -422,6 +424,7 @@ export function FigurePlanWorkbench({
               systemId={systemId}
               plan={selectedPlan}
               sections={sections}
+              figureFramework={figureFramework}
               onDeleteSuccess={handleDeleteSuccess}
             />
           ) : (
@@ -444,11 +447,13 @@ function FigurePlanDetailPanel({
   systemId,
   plan,
   sections,
+  figureFramework,
   onDeleteSuccess,
 }: Readonly<{
   systemId: string
   plan: FigurePlanDetail
   sections: Section[]
+  figureFramework: FigureFrameworkEntry[]
   onDeleteSuccess: (planId: string) => void
 }>) {
   const patchMut = usePatchFigurePlan(systemId)
@@ -639,6 +644,16 @@ function FigurePlanDetailPanel({
               <div style={detailValueStyle}>{plan.claimText}</div>
             </>
           ) : null}
+
+          {(() => {
+            const q = plan.dataQuestion ?? figureFramework.find((f) => f.figureId === plan.figureNo)?.dataQuestion
+            return q ? (
+              <>
+                <div style={detailLabelStyle}>数据问题</div>
+                <div style={{ ...detailValueStyle, color: "#fbbf24" }}>{q}</div>
+              </>
+            ) : null
+          })()}
 
           {plan.sectionKey ? (
             <>

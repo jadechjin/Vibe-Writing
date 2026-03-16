@@ -44,6 +44,8 @@ function buildPlan(overrides: Partial<figurePlanHooks.FigurePlanDetail> = {}): f
     skeletonVersion: 2,
     briefText: "Initial brief",
     briefConfirmedAt: null,
+    dataQuestion: null,
+    evidenceText: null,
     createdAt: "2026-03-14T00:00:00Z",
     updatedAt: "2026-03-14T00:00:00Z",
     ...overrides,

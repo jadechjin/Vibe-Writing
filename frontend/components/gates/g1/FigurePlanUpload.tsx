@@ -151,7 +151,15 @@ export function FigurePlanUpload({ planId }: FigurePlanUploadProps) {
           {assets.map((asset) => (
             <div key={asset.id} style={thumbWrap}>
               {asset.previewUrl ? (
-                <img src={asset.previewUrl} alt={asset.fileName} style={thumbImg} />
+                <img
+                  src={asset.previewUrl}
+                  alt={asset.fileName}
+                  style={{ ...thumbImg, cursor: "grab" }}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("application/x-vibe-asset", JSON.stringify(asset))
+                  }}
+                />
               ) : (
                 <div style={{ ...thumbImg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: "#64748b" }}>
                   {asset.fileName}

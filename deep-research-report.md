@@ -199,7 +199,7 @@ Dify 侧至少需要明确两类配置：
 | confidence.breakdown | object | `{ocr:0.9, geometry:0.8, consistency:0.85}` | 分项置信（便于人工审核） |
 | narrative.summary_cn | string | `"图中显示…总体呈上升趋势…"` | 面向写作的中文摘要（必须可引用、可追溯） |
 | narrative.detail_cn | string | `"在0–10 s区间…峰值约为…（见图中标注A）…"` | 更细粒度自然语言描述（建议分段结构） |
-| evidence_units[] | array<object> | `{id:"eu_1", type:"peak", bbox:{...}, linked_data_refs:[...], claim_text:"峰值约为…"} ` | “细节单元”列表：每个单元是证据映射与写作引用的最小单位 |
+| evidence_units[] | array<object> | `{id:"eu_1", type:"peak", bbox:{...}, linked_data_refs:[...], claim_text:"峰值约为…"}` | “细节单元”列表：每个单元是证据映射与写作引用的最小单位 |
 | citations[] | array<object> | `{id:"c1", title:"DePlot…", doi:"10.48550/arXiv.2212.10505", url:"https://arxiv.org/abs/2212.10505"}` | 引用文献列表（必须含 DOI 或 URL 至少其一） |
 | citations[].snippets[] | array<object> | `{source:"dify_chunk", text:"...", locator:"docX#seg12"}` | 支撑片段（来自 groksearch 或 Dify chunk），用于归因 |
 | evidence_map[] | array<object> | `{evidence_unit_id:"eu_1", citation_ids:["c3"], rationale_cn:"用于解释…方法学依据"}` | 证据映射：细节单元↔引用↔理由 |

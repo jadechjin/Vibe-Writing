@@ -63,6 +63,7 @@ def _build_chat_command(
             "--output-format",
             "stream-json",
             "--include-partial-messages",
+            "--dangerously-skip-permissions",
         ]
         if session_id:
             cmd.extend(["--resume", session_id])

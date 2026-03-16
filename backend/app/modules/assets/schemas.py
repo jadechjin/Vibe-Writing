@@ -177,6 +177,8 @@ class ImageAnalysisItem(CamelModel):
     figure_no: str
     title: str
     section_key: str | None = None
+    data_question: str | None = None
+    evidence_text: str | None = None
     assets: list[FigurePlanAssetDetail] = Field(default_factory=list)
     latest_analysis: AnalysisRunSummary | None = None
 
@@ -247,6 +249,61 @@ class BatchConfirmAssetQCResponse(CamelModel):
     failed: list[dict[str, str]]
 
 
+class ManifestPlanAsset(CamelModel):
+    id: str
+    file_name: str
+    asset_type: str
+    mime_type: str | None = None
+    qc_status: str | None = None
+
+
+class ManifestPlanAnalysis(CamelModel):
+    id: str
+    status: str
+    summary: str | None = None
+
+
+class ManifestFigurePlanEntry(CamelModel):
+    figure_plan_id: str
+    figure_no: str
+    title: str
+    section_key: str | None = None
+    data_question: str | None = None
+    evidence_text: str | None = None
+    assets: list[ManifestPlanAsset] = Field(default_factory=list)
+    latest_analysis: ManifestPlanAnalysis | None = None
+    completeness: str
+
+
+class ManifestIssue(CamelModel):
+    severity: str
+    rule: str
+    scope: str
+    message: str
+    detail: str | None = None
+    resolution: str | None = None
+
+
+class ManifestSummaryStats(CamelModel):
+    total_plans: int
+    complete_plans: int
+    incomplete_plans: int
+    total_assets: int
+    confirmed_assets: int
+    orphan_assets: int
+    blocker_count: int
+    warning_count: int
+
+
+class ManifestPreviewResponse(CamelModel):
+    system_id: str
+    summary: ManifestSummaryStats
+    figure_plans: list[ManifestFigurePlanEntry] = Field(default_factory=list)
+    orphan_assets: list[ManifestPlanAsset] = Field(default_factory=list)
+    issues: list[ManifestIssue] = Field(default_factory=list)
+    manifest: ManifestDetail | None = None
+
+
 __all__ = [
     "AnalysisRunCompleteRequest",
     "AnalysisRunCreateAcceptedResponse",
@@ -269,4 +326,10 @@ __all__ = [
     "ManifestCreateAcceptedResponse",
     "ManifestCreateRequest",
     "ManifestDetail",
+    "ManifestFigurePlanEntry",
+    "ManifestIssue",
+    "ManifestPlanAnalysis",
+    "ManifestPlanAsset",
+    "ManifestPreviewResponse",
+    "ManifestSummaryStats",
 ]

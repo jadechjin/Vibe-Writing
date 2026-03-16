@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from inspect import isawaitable
 from typing import Any, BinaryIO, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -31,10 +31,17 @@ from app.modules.assets.schemas import (
     ManifestCreateAcceptedResponse,
     ManifestCreateRequest,
     ManifestDetail,
+    ManifestFigurePlanEntry,
+    ManifestIssue,
+    ManifestPlanAnalysis,
+    ManifestPlanAsset,
+    ManifestPreviewResponse,
+    ManifestSummaryStats,
 )
 from app.modules.gates.service import check_data_and_analysis_ready
 from app.modules.tasks.service import TaskWorkflowService
 from app.persistence.models import AnalysisRun, Asset, AssetManifest, AssetMetadata, ExperimentalSystem
+from app.persistence.models.evidence import FigurePlan, FigurePlanAsset
 from app.realtime.broadcaster import TaskBroadcaster
 from app.workflows.system_workflow import (
     WorkflowCommand,
@@ -675,6 +682,195 @@ def _build_manifest_json(
     }
 
 
+async def _build_manifest_preview(
+    session: SessionLike,
+    system: ExperimentalSystem,
+    assets: list[Asset],
+) -> ManifestPreviewResponse:
+    result = await _maybe_await(
+        session.execute(
+            select(FigurePlan).where(FigurePlan.system_id == system.id)
+        )
+    )
+    plans = list(result.scalars().all())
+    latest_plans = _latest_by_version_generic(plans, key=lambda p: p.figure_no)
+    confirmed_plans = [p for p in latest_plans if _is_confirmed_status(p.status)]
+
+    asset_by_id: dict[str, Asset] = {a.id: a for a in assets}
+    linked_asset_ids: set[str] = set()
+
+    figure_plan_entries: list[ManifestFigurePlanEntry] = []
+    issues: list[ManifestIssue] = []
+    complete_count = 0
+
+    for plan in confirmed_plans:
+        fpa_result = await _maybe_await(
+            session.execute(
+                select(FigurePlanAsset).where(
+                    FigurePlanAsset.figure_plan_id == plan.id
+                )
+            )
+        )
+        plan_assets_rows = list(fpa_result.scalars().all())
+
+        plan_asset_items: list[ManifestPlanAsset] = []
+        for fpa in plan_assets_rows:
+            linked_asset_ids.add(fpa.asset_id)
+            asset = asset_by_id.get(fpa.asset_id)
+            if asset is not None:
+                md = asset.metadata_entry
+                plan_asset_items.append(ManifestPlanAsset(
+                    id=asset.id,
+                    file_name=asset.file_name,
+                    asset_type=asset.asset_type,
+                    mime_type=asset.mime_type,
+                    qc_status=md.qc_status if md else None,
+                ))
+
+        ar_result = await _maybe_await(
+            session.execute(
+                select(AnalysisRun)
+                .where(
+                    AnalysisRun.figure_plan_id == plan.id,
+                    AnalysisRun.status == TaskStatus.SUCCEEDED.value,
+                )
+                .order_by(AnalysisRun.created_at.desc())
+                .limit(1)
+            )
+        )
+        latest_analysis_row = ar_result.scalar_one_or_none()
+
+        analysis_item = None
+        if latest_analysis_row is not None:
+            analysis_item = ManifestPlanAnalysis(
+                id=latest_analysis_row.id,
+                status=latest_analysis_row.status,
+                summary=latest_analysis_row.summary,
+            )
+
+        has_assets = len(plan_asset_items) > 0
+        has_evidence = bool(plan.evidence_text and plan.evidence_text.strip())
+        has_analysis = latest_analysis_row is not None
+
+        if not has_assets:
+            completeness = "missing_assets"
+            issues.append(ManifestIssue(
+                severity="blocker",
+                rule="missing_assets",
+                scope=plan.figure_no,
+                message=f"{plan.figure_no} ({plan.title}) 未关联任何图片",
+                detail=f"图表计划 {plan.figure_no} 需要至少一张实验图片才能进入证据矩阵阶段。",
+                resolution="请返回 G2 数据上传阶段，为该图表计划上传对应的实验图片。",
+            ))
+        elif not has_evidence and not has_analysis:
+            completeness = "missing_evidence"
+            issues.append(ManifestIssue(
+                severity="blocker",
+                rule="missing_evidence",
+                scope=plan.figure_no,
+                message=f"{plan.figure_no} ({plan.title}) 缺少分析结论",
+                detail=f"图表计划 {plan.figure_no} 已有 {len(plan_asset_items)} 张图片，但尚未完成数据分析或填写分析结论（evidence_text）。",
+                resolution="请返回 G2 数据分析阶段，对该图表运行 AI 分析或手动填写分析结论。",
+            ))
+        else:
+            completeness = "complete"
+            complete_count += 1
+
+        figure_plan_entries.append(ManifestFigurePlanEntry(
+            figure_plan_id=plan.id,
+            figure_no=plan.figure_no,
+            title=plan.title,
+            section_key=plan.section_key,
+            data_question=plan.data_question,
+            evidence_text=plan.evidence_text,
+            assets=plan_asset_items,
+            latest_analysis=analysis_item,
+            completeness=completeness,
+        ))
+
+    orphan_list: list[ManifestPlanAsset] = []
+    for asset in assets:
+        if asset.id not in linked_asset_ids:
+            orphan_list.append(ManifestPlanAsset(
+                id=asset.id,
+                file_name=asset.file_name,
+                asset_type=asset.asset_type,
+                mime_type=asset.mime_type,
+                qc_status=asset.metadata_entry.qc_status if asset.metadata_entry else None,
+            ))
+            issues.append(ManifestIssue(
+                severity="warning",
+                rule="orphan_asset",
+                scope=asset.file_name,
+                message=f"{asset.file_name} 未关联到任何图表计划",
+                detail=f"文件 {asset.file_name}（类型：{asset.asset_type}）已上传但未绑定到任何 FigurePlan。",
+                resolution="如果该文件是实验数据的一部分，请在 G2 阶段将其关联到对应的图表计划；如果不需要，可忽略此警告。",
+            ))
+
+    blocker_count = sum(1 for i in issues if i.severity == "blocker")
+    warning_count = sum(1 for i in issues if i.severity == "warning")
+
+    confirmed_plan_assets = sum(
+        len(e.assets) for e in figure_plan_entries if e.completeness == "complete"
+    )
+
+    summary = ManifestSummaryStats(
+        total_plans=len(confirmed_plans),
+        complete_plans=complete_count,
+        incomplete_plans=len(confirmed_plans) - complete_count,
+        total_assets=len(assets),
+        confirmed_assets=confirmed_plan_assets,
+        orphan_assets=len(orphan_list),
+        blocker_count=blocker_count,
+        warning_count=warning_count,
+    )
+
+    return ManifestPreviewResponse(
+        system_id=system.id,
+        summary=summary,
+        figure_plans=figure_plan_entries,
+        orphan_assets=orphan_list,
+        issues=issues,
+    )
+
+
+async def get_manifest_preview(
+    session: SessionLike,
+    system_id: str,
+) -> ManifestPreviewResponse:
+    system = await repository.get_system_with_project(session, system_id)
+    if system is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="System not found",
+            status_code=404,
+            details={"system_id": system_id},
+        )
+
+    assets = await repository.list_assets_for_system(session, system_id)
+    preview = await _build_manifest_preview(session, system, assets)
+
+    manifest = await repository.get_latest_manifest(session, system_id)
+    if manifest is not None:
+        preview.manifest = _build_manifest_detail(manifest)
+
+    return preview
+
+
+def _is_confirmed_status(status: str | None) -> bool:
+    return (status or "").strip().lower() in {"confirmed", "approved"}
+
+
+def _latest_by_version_generic(items: list, *, key) -> list:
+    latest: dict[object, object] = {}
+    for item in items:
+        item_key = key(item)
+        current = latest.get(item_key)
+        if current is None or item.version > current.version:  # type: ignore[union-attr]
+            latest[item_key] = item
+    return list(latest.values())
+
+
 
 def _get_sync_session(session: SessionLike) -> Session:
     if isinstance(session, AsyncSession):
@@ -840,6 +1036,56 @@ async def confirm_manifest(session: SessionLike, manifest_id: str) -> ManifestCo
     )
 
 
+async def confirm_manifest_from_preview(
+    session: SessionLike,
+    system_id: str,
+) -> ManifestConfirmResponse:
+    system = await repository.get_system_with_project(session, system_id)
+    if system is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="System not found",
+            status_code=404,
+            details={"system_id": system_id},
+        )
+
+    assets = await repository.list_assets_for_system(session, system_id)
+    preview = await _build_manifest_preview(session, system, assets)
+
+    blocker_issues = [i for i in preview.issues if i.severity == "blocker"]
+    if blocker_issues:
+        raise AppException(
+            code=ErrorCode.CONFLICT.value,
+            message="Cannot confirm manifest with unresolved blockers",
+            status_code=409,
+            details={
+                "system_id": system_id,
+                "blocker_count": len(blocker_issues),
+                "blockers": [i.message for i in blocker_issues],
+            },
+        )
+
+    snapshot_json = preview.model_dump(by_alias=True, mode="json")
+
+    version = await repository.get_next_manifest_version(session, system_id)
+    manifest = await repository.create_manifest(
+        session,
+        project_id=system.project_id,
+        system_id=system.id,
+        version=version,
+        status="confirmed",
+        manifest_json=snapshot_json,
+    )
+    await _maybe_await(session.commit())
+
+    return ManifestConfirmResponse(
+        id=manifest.id,
+        system_id=manifest.system_id,
+        status=manifest.status,
+        confirmed_at=manifest.updated_at,
+    )
+
+
 async def confirm_asset_qc(session: SessionLike, asset_id: str) -> AssetQCConfirmResponse:
     statement = select(AssetMetadata).where(AssetMetadata.asset_id == asset_id)
     result = await _maybe_await(session.execute(statement))
@@ -902,12 +1148,14 @@ __all__ = [
     "complete_manifest_generation",
     "confirm_asset_qc",
     "confirm_manifest",
+    "confirm_manifest_from_preview",
     "create_asset_from_upload",
     "create_analysis_run",
     "create_manifest",
     "delete_asset",
     "get_asset_detail",
     "get_latest_manifest",
+    "get_manifest_preview",
     "list_analysis_runs",
     "list_assets_for_system",
     "upload_asset",

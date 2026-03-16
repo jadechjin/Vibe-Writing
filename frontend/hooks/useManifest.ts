@@ -41,6 +41,7 @@ export type AssetQCConfirmResponse = {
 
 const manifestKeys = {
   detail: (systemId: string) => ["manifest", systemId] as const,
+  preview: (systemId: string) => ["manifest-preview", systemId] as const,
 }
 
 export function useManifest(systemId: string) {
@@ -116,7 +117,88 @@ export function useBatchConfirmAssetQC(systemId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assets", systemId] })
       queryClient.invalidateQueries({ queryKey: manifestKeys.detail(systemId) })
+      queryClient.invalidateQueries({ queryKey: manifestKeys.preview(systemId) })
       queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
     },
+  })
+}
+
+export type ManifestPlanAsset = {
+  id: string
+  fileName: string
+  assetType: string
+  mimeType: string | null
+  qcStatus: string | null
+}
+
+export type ManifestPlanAnalysis = {
+  id: string
+  status: string
+  summary: string | null
+}
+
+export type ManifestFigurePlanEntry = {
+  figurePlanId: string
+  figureNo: string
+  title: string
+  sectionKey: string | null
+  dataQuestion: string | null
+  evidenceText: string | null
+  assets: ManifestPlanAsset[]
+  latestAnalysis: ManifestPlanAnalysis | null
+  completeness: "complete" | "missing_assets" | "missing_evidence"
+}
+
+export type ManifestIssue = {
+  severity: "blocker" | "warning"
+  rule: string
+  scope: string
+  message: string
+  detail: string | null
+  resolution: string | null
+}
+
+export type ManifestSummaryStats = {
+  totalPlans: number
+  completePlans: number
+  incompletePlans: number
+  totalAssets: number
+  confirmedAssets: number
+  orphanAssets: number
+  blockerCount: number
+  warningCount: number
+}
+
+export type ManifestPreview = {
+  systemId: string
+  summary: ManifestSummaryStats
+  figurePlans: ManifestFigurePlanEntry[]
+  orphanAssets: ManifestPlanAsset[]
+  issues: ManifestIssue[]
+  manifest: ManifestDetail | null
+}
+
+export function useConfirmManifestFromPreview(systemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<ManifestConfirmResponse>(`/systems/${systemId}/manifest-confirm`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: manifestKeys.detail(systemId) })
+      queryClient.invalidateQueries({ queryKey: manifestKeys.preview(systemId) })
+      queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
+    },
+  })
+}
+
+export function useManifestPreview(systemId: string) {
+  return useQuery({
+    queryKey: manifestKeys.preview(systemId),
+    queryFn: () => apiRequest<ManifestPreview>(`/systems/${systemId}/manifest-preview`),
+    enabled: !!systemId,
+    refetchInterval: 15_000,
   })
 }
