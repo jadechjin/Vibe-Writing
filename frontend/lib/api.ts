@@ -11,20 +11,44 @@ export type ApiResponse<T> = {
   }
 }
 
+export type ApiErrorPayload = {
+  code?: string
+  details?: Record<string, unknown>
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly serverError: string | undefined
+  readonly code: string | undefined
+  readonly details: Record<string, unknown>
 
-  constructor(status: number, serverError?: string) {
+  constructor(status: number, serverError?: string, payload: ApiErrorPayload = {}) {
     super(serverError ?? `Request failed with status ${status}`)
     this.name = "ApiError"
     this.status = status
     this.serverError = serverError
+    this.code = payload.code
+    this.details = payload.details ?? {}
   }
 }
 
 type RequestOptions = RequestInit & {
   query?: Record<string, string | number | boolean | undefined>
+}
+
+function extractApiErrorPayload(data: unknown): ApiErrorPayload {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return {}
+  }
+
+  const payload = data as Record<string, unknown>
+  return {
+    code: typeof payload.code === "string" ? payload.code : undefined,
+    details:
+      payload.details && typeof payload.details === "object" && !Array.isArray(payload.details)
+        ? (payload.details as Record<string, unknown>)
+        : undefined,
+  }
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -52,13 +76,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (!response.ok) {
     let serverError: string | undefined
+    let payload: ApiErrorPayload = {}
     try {
       const body = (await response.json()) as ApiResponse<unknown>
       serverError = body.error ?? undefined
+      payload = extractApiErrorPayload(body.data)
     } catch {
       // non-JSON error body
     }
-    throw new ApiError(response.status, serverError)
+    throw new ApiError(response.status, serverError, payload)
   }
 
   if (response.status === 204) {
@@ -68,7 +94,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const body = (await response.json()) as ApiResponse<T>
 
   if (!body.success && body.error) {
-    throw new ApiError(response.status, body.error)
+    throw new ApiError(response.status, body.error, extractApiErrorPayload(body.data))
   }
 
   return body.data as T

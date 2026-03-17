@@ -19,12 +19,15 @@ from app.persistence.base import Base
 from app.persistence.models import (
     AnalysisRun,
     Asset,
+    AssetManifest,
     AssetMetadata,
     Claim,
     ClaimEvidenceLink,
     ExperimentalSystem,
     FigurePlan,
     FigurePlanAsset,
+    G4Snapshot,
+    Outline,
     Project,
     ProjectMember,
     ProjectMemberRole,
@@ -42,11 +45,14 @@ ALL_TABLES = [
     StructureSkeleton.__table__,
     Asset.__table__,
     AssetMetadata.__table__,
+    AssetManifest.__table__,
     AnalysisRun.__table__,
     FigurePlan.__table__,
     FigurePlanAsset.__table__,
     Claim.__table__,
     ClaimEvidenceLink.__table__,
+    Outline.__table__,
+    G4Snapshot.__table__,
     WorkflowInstance.__table__,
     WorkflowEvent.__table__,
 ]
@@ -231,6 +237,7 @@ def _create_figure_plan(
     title: str = "Figure 1",
     claim_text: str = "test",
     status: str = "pending",
+    section_key: str | None = None,
 ) -> FigurePlan:
     plan = FigurePlan(
         system_id=system_id,
@@ -238,6 +245,7 @@ def _create_figure_plan(
         title=title,
         claim_text=claim_text,
         status=status,
+        section_key=section_key,
     )
     session.add(plan)
     session.flush()
@@ -681,7 +689,53 @@ def test_generate_evidence_matrix_returns_accepted(client: TestClient, engine) -
                 SystemSection(system_id=system.id, section_key="discussion", title="Discussion", order_no=2),
             ]
         )
-        _create_asset_with_analysis(session, project_id=project.id, system_id=system.id)
+        _create_confirmed_skeleton(session, system_id=system.id)
+        plan_one = _create_figure_plan(
+            session,
+            system_id=system.id,
+            figure_no="fig1",
+            title="Figure 1",
+            status="confirmed",
+            section_key="results",
+        )
+        plan_two = _create_figure_plan(
+            session,
+            system_id=system.id,
+            figure_no="fig2",
+            title="Figure 2",
+            status="confirmed",
+            section_key="discussion",
+        )
+        asset_one = _create_asset_with_analysis(
+            session,
+            project_id=project.id,
+            system_id=system.id,
+            file_name="fig-1.png",
+            storage_key="uploads/fig-1.png",
+        )
+        asset_two = _create_asset_with_analysis(
+            session,
+            project_id=project.id,
+            system_id=system.id,
+            file_name="fig-2.png",
+            storage_key="uploads/fig-2.png",
+        )
+        session.add_all(
+            [
+                FigurePlanAsset(
+                    figure_plan_id=plan_one.id,
+                    asset_id=asset_one.id,
+                    role="source_image",
+                    position=0,
+                ),
+                FigurePlanAsset(
+                    figure_plan_id=plan_two.id,
+                    asset_id=asset_two.id,
+                    role="source_image",
+                    position=0,
+                ),
+            ]
+        )
         session.commit()
         system_id = system.id
 
@@ -727,7 +781,7 @@ def test_generate_evidence_matrix_returns_accepted(client: TestClient, engine) -
             select(WorkflowEvent).where(WorkflowEvent.instance_id == workflow.id).order_by(WorkflowEvent.created_at.asc())
         ).all()
 
-    assert [claim.claim_id for claim in claims] == ["C1", "C2"]
+    assert [claim.claim_id for claim in claims] == ["Sdiscussion-Ffig2-1", "Sresults-Ffig1-1"]
     assert {claim.section_ref for claim in claims} == {"results", "discussion"}
     assert all(claim.status == "draft" for claim in claims)
     assert len(links) == 2
@@ -738,7 +792,204 @@ def test_generate_evidence_matrix_returns_accepted(client: TestClient, engine) -
     assert list_response.status_code == 200
     list_body = list_response.json()
     assert list_body["success"] is True
-    assert [item["claimId"] for item in list_body["data"]] == ["C1", "C2"]
+    assert [item["claimId"] for item in list_body["data"]] == ["Sdiscussion-Ffig2-1", "Sresults-Ffig1-1"]
+
+
+def test_generate_evidence_matrix_deduplicates_repeated_plan_assets_without_rolling_back(
+    client: TestClient, engine,
+) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(
+            session,
+            project_id=project.id,
+            status=SystemState.ASSETS_CONFIRMED.value,
+        )
+        session.add(SystemSection(system_id=system.id, section_key="results", title="Results", order_no=1))
+        _create_confirmed_skeleton(session, system_id=system.id)
+        plan = _create_figure_plan(
+            session,
+            system_id=system.id,
+            figure_no="fig1",
+            title="Figure 1",
+            status="confirmed",
+            section_key="results",
+        )
+        asset = _create_asset_with_analysis(
+            session,
+            project_id=project.id,
+            system_id=system.id,
+            file_name="fig-1.png",
+            storage_key="uploads/fig-1.png",
+        )
+        session.add_all(
+            [
+                FigurePlanAsset(
+                    figure_plan_id=plan.id,
+                    asset_id=asset.id,
+                    role="source_image",
+                    position=0,
+                ),
+                FigurePlanAsset(
+                    figure_plan_id=plan.id,
+                    asset_id=asset.id,
+                    role="annotated_image",
+                    position=1,
+                ),
+            ]
+        )
+        session.commit()
+        system_id = system.id
+
+    response = client.post(f"/api/systems/{system_id}/evidence-matrix/generate", json={})
+
+    assert response.status_code == 202
+    body = response.json()
+    workflow_id = body["data"]["handle"]["workflow_id"]
+    assert workflow_id is not None
+
+    _wait_for_evidence_matrix_completion(engine, workflow_id, system_id, expected_claim_count=1)
+
+    with Session(engine) as session:
+        claims = session.scalars(
+            select(Claim).where(Claim.system_id == system_id).order_by(Claim.claim_id.asc(), Claim.version.asc())
+        ).all()
+        links = session.scalars(
+            select(ClaimEvidenceLink)
+            .join(Claim, Claim.id == ClaimEvidenceLink.claim_record_id)
+            .where(Claim.system_id == system_id)
+            .order_by(ClaimEvidenceLink.created_at.asc())
+        ).all()
+
+    assert [claim.claim_id for claim in claims] == ["Sresults-Ffig1-1"]
+    assert len(links) == 1
+
+
+def test_generate_evidence_matrix_rejects_regeneration_when_latest_claim_or_outline_is_confirmed(
+    client: TestClient, engine,
+) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(
+            session,
+            project_id=project.id,
+            status=SystemState.ASSETS_CONFIRMED.value,
+        )
+        session.add(SystemSection(system_id=system.id, section_key="results", title="Results", order_no=1))
+        _create_confirmed_skeleton(session, system_id=system.id)
+        _create_figure_plan(
+            session,
+            system_id=system.id,
+            figure_no="fig1",
+            title="Figure 1",
+            status="confirmed",
+            section_key="results",
+        )
+        session.add(
+            Claim(
+                system_id=system.id,
+                claim_id="claim-1",
+                statement="already approved latest claim",
+                section_ref="results",
+                status="approved",
+                version=1,
+            )
+        )
+        session.add(
+            Outline(
+                system_id=system.id,
+                version=1,
+                outline_json={"sections": []},
+                generated_from_claims_json=[],
+                status="confirmed",
+            )
+        )
+        session.commit()
+        system_id = system.id
+
+    response = client.post(f"/api/systems/{system_id}/evidence-matrix/generate", json={})
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["success"] is False
+    assert body["data"]["code"] == "evidence_matrix_regeneration_conflict"
+    assert body["data"]["details"]["approved_latest_claim_count"] == 1
+    assert body["data"]["details"]["confirmed_outline_count"] == 1
+    assert body["data"]["details"]["sections_affected"] == ["results"]
+    assert body["data"]["details"]["force_regenerate"] is False
+
+
+def test_generate_evidence_matrix_allows_force_regeneration_even_when_latest_claim_or_outline_exists(
+    client: TestClient, engine,
+) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(
+            session,
+            project_id=project.id,
+            status=SystemState.ASSETS_CONFIRMED.value,
+        )
+        session.add(SystemSection(system_id=system.id, section_key="results", title="Results", order_no=1))
+        _create_confirmed_skeleton(session, system_id=system.id)
+        plan = _create_figure_plan(
+            session,
+            system_id=system.id,
+            figure_no="fig1",
+            title="Figure 1",
+            status="confirmed",
+            section_key="results",
+        )
+        asset = _create_asset_with_analysis(session, project_id=project.id, system_id=system.id)
+        session.add(
+            FigurePlanAsset(
+                figure_plan_id=plan.id,
+                asset_id=asset.id,
+                role="source_image",
+                position=0,
+            )
+        )
+        session.add(
+            Claim(
+                system_id=system.id,
+                claim_id="claim-1",
+                statement="already approved latest claim",
+                section_ref="results",
+                status="approved",
+                version=1,
+            )
+        )
+        session.add(
+            Outline(
+                system_id=system.id,
+                version=1,
+                outline_json={"sections": []},
+                generated_from_claims_json=[],
+                status="confirmed",
+            )
+        )
+        session.commit()
+        system_id = system.id
+
+    response = client.post(
+        f"/api/systems/{system_id}/evidence-matrix/generate",
+        json={"forceRegenerate": True},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["success"] is True
+    handle = body["data"]["handle"]
+    workflow_id = handle["workflow_id"]
+    assert workflow_id is not None
+    assert body["data"]["invalidationSummary"] == {
+        "approvedLatestClaimCount": 1,
+        "confirmedOutlineCount": 1,
+        "sectionsAffected": ["results"],
+        "willInvalidateClaimApprovals": True,
+        "willInvalidateOutlines": True,
+    }
+
+    _wait_for_evidence_matrix_completion(engine, workflow_id, system_id, expected_claim_count=2)
 
 
 def test_list_claims_empty(client: TestClient, engine) -> None:

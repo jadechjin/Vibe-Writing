@@ -18,7 +18,8 @@ from app.modules.tasks.service import TaskWorkflowService
 from app.persistence import get_db_session
 from app.persistence.base import Base
 from app.persistence.models.asset import Asset
-from app.persistence.models.evidence import FigurePlan
+from app.persistence.models.draft import Outline, OutlineAssetBinding
+from app.persistence.models.evidence import AnalysisRun, Claim, ClaimEvidenceLink, FigurePlan
 from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.project import Project, ProjectMember, ProjectMemberRole
 from app.persistence.models.skeleton import StructureSkeleton
@@ -71,6 +72,11 @@ ALL_TABLES = [
     SystemSection.__table__,
     StructureSkeleton.__table__,
     Asset.__table__,
+    AnalysisRun.__table__,
+    Claim.__table__,
+    ClaimEvidenceLink.__table__,
+    Outline.__table__,
+    OutlineAssetBinding.__table__,
     AssetManifest.__table__,
     FigurePlan.__table__,
     WorkflowInstance.__table__,
@@ -435,6 +441,83 @@ def test_get_workflow_returns_null_when_no_workflow(client: TestClient, engine) 
     body = response.json()
     assert body["success"] is True
     assert body["data"] is None
+
+
+def test_get_workflow_recomputes_live_blockers_after_gate_data_changes(
+    async_client: TestClient,
+    engine,
+) -> None:
+    with Session(engine) as session:
+        project = _create_project(session)
+        system = _create_system(
+            session,
+            project_id=project.id,
+            status=SystemState.ASSETS_CONFIRMED.value,
+        )
+        session.add(
+            SystemSection(system_id=system.id, section_key="results", title="Results", order_no=1)
+        )
+        asset = Asset(
+            project_id=project.id,
+            system_id=system.id,
+            asset_type="figure",
+            file_name="figure-1.png",
+            storage_key="uploads/figure-1.png",
+            uploaded_by="owner-1",
+        )
+        session.add(asset)
+        session.flush()
+        claim = Claim(
+            system_id=system.id,
+            claim_id="claim-1",
+            statement="Supported claim",
+            section_ref="results",
+            status="approved",
+        )
+        session.add(claim)
+        session.flush()
+        session.add(ClaimEvidenceLink(claim_record_id=claim.id, asset_id=asset.id))
+        outline = Outline(
+            system_id=system.id,
+            version=1,
+            outline_json={"sections": [{"sectionKey": "results"}]},
+            generated_from_claims_json=[claim.id],
+            status="draft",
+        )
+        session.add(outline)
+        session.commit()
+        system_id = system.id
+        outline_id = outline.id
+        asset_id = asset.id
+
+    blocked_response = async_client.post(f"/api/systems/{system_id}/advance")
+
+    assert blocked_response.status_code == 200
+    blocked_body = blocked_response.json()
+    assert blocked_body["success"] is True
+    assert blocked_body["data"]["outcome"] == "blocked"
+    blocker_codes = [blocker["code"] for blocker in blocked_body["data"]["blockers"]]
+    assert blocker_codes == ["outline_not_ready"]
+
+    with Session(engine) as session:
+        outline = session.get(Outline, outline_id)
+        assert outline is not None
+        outline.status = "confirmed"
+        session.add(
+            OutlineAssetBinding(
+                outline_id=outline.id,
+                asset_id=asset_id,
+                section_key="results",
+            )
+        )
+        session.commit()
+
+    workflow_response = async_client.get(f"/api/systems/{system_id}/workflow")
+
+    assert workflow_response.status_code == 200
+    workflow_body = workflow_response.json()
+    assert workflow_body["success"] is True
+    assert workflow_body["data"]["latest_blockers"] == []
 
 
 def test_advance_route_uses_asyncsession_run_sync_for_g1_blocked(

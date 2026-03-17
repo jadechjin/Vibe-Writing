@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
@@ -47,7 +49,9 @@ from app.modules.evidence.schemas import (
     ClaimDetail,
     ClaimEvidenceLinkCreateRequest,
     ClaimEvidenceLinkDetail,
+    EvidenceGapDetail,
     EvidenceMatrixGenerateAcceptedResponse,
+    EvidenceMatrixInvalidationSummary,
     FigurePlanAssetDetail,
     FigurePlanConfirmRequest,
     FigurePlanDetail,
@@ -55,17 +59,21 @@ from app.modules.evidence.schemas import (
     FigurePlanPatchRequest,
     FigurePlanStatusTransitionRequest,
     FigurePlanUpdateBriefRequest,
+    G4SnapshotDetail,
 )
 from app.modules.tasks.service import TaskWorkflowService
 from app.persistence.models import (
     AnalysisRun,
     Asset,
+    AssetManifest,
     Claim,
     ClaimEvidenceLink,
     FigurePlan,
     FigurePlanAsset,
     FigurePlanChatMessage,
     FigurePlanChatSession,
+    G4Snapshot,
+    Outline,
     SystemSection,
 )
 from app.persistence.models.skeleton import StructureSkeleton
@@ -856,6 +864,8 @@ async def generate_evidence_matrix(
     session: SessionLike,
     system_id: str,
     broadcaster: TaskBroadcaster | None = None,
+    *,
+    force_regenerate: bool = False,
 ) -> EvidenceMatrixGenerateAcceptedResponse:
     system = await repository.get_system_with_project(session, system_id)
     if system is None:
@@ -864,6 +874,39 @@ async def generate_evidence_matrix(
             message="System not found",
             status_code=404,
             details={"system_id": system_id},
+        )
+
+    conflict_details = await _build_evidence_matrix_regeneration_conflict_details(
+        session,
+        system_id=system.id,
+    )
+    has_conflict = (
+        conflict_details["approved_latest_claim_count"] > 0
+        or conflict_details["confirmed_outline_count"] > 0
+    )
+    if has_conflict and not force_regenerate:
+        raise AppException(
+            code="evidence_matrix_regeneration_conflict",
+            message=(
+                "Cannot regenerate evidence matrix because latest approved claims or "
+                "confirmed outline already exists"
+            ),
+            status_code=409,
+            details={
+                **conflict_details,
+                "system_id": system.id,
+                "force_regenerate": False,
+            },
+        )
+
+    invalidation_summary: EvidenceMatrixInvalidationSummary | None = None
+    if has_conflict and force_regenerate:
+        invalidation_summary = EvidenceMatrixInvalidationSummary(
+            approved_latest_claim_count=conflict_details["approved_latest_claim_count"],
+            confirmed_outline_count=conflict_details["confirmed_outline_count"],
+            sections_affected=conflict_details["sections_affected"],
+            will_invalidate_claim_approvals=conflict_details["approved_latest_claim_count"] > 0,
+            will_invalidate_outlines=conflict_details["confirmed_outline_count"] > 0,
         )
 
     task_service = TaskWorkflowService(_get_task_session(session))  # type: ignore[arg-type]
@@ -896,7 +939,73 @@ async def generate_evidence_matrix(
             message="Evidence matrix generation started",
         )
 
-    return EvidenceMatrixGenerateAcceptedResponse(handle=started.handle)
+    return EvidenceMatrixGenerateAcceptedResponse(
+        handle=started.handle,
+        invalidation_summary=invalidation_summary,
+    )
+
+
+async def _build_evidence_matrix_regeneration_conflict_details(
+    session: SessionLike,
+    *,
+    system_id: str,
+) -> dict[str, Any]:
+    claims = await repository.list_claims(session, system_id)
+    latest_by_claim_id: dict[str, Claim] = {}
+    for claim in claims:
+        current = latest_by_claim_id.get(claim.claim_id)
+        if current is None or claim.version > current.version:
+            latest_by_claim_id[claim.claim_id] = claim
+
+    approved_latest_claims = [
+        claim for claim in latest_by_claim_id.values() if claim.status == "approved"
+    ]
+    approved_latest_claim_count = len(approved_latest_claims)
+    sections_affected = {
+        claim.section_ref
+        for claim in approved_latest_claims
+        if claim.section_ref and claim.section_ref.strip()
+    }
+
+    outline_result = await _maybe_await(
+        session.execute(
+            select(Outline).where(
+                Outline.system_id == system_id,
+                Outline.status.in_(("confirmed", "approved")),
+            )
+        )
+    )
+    confirmed_outlines = outline_result.scalars().all()
+    confirmed_outline_count = len(confirmed_outlines)
+    for outline in confirmed_outlines:
+        sections_affected.update(_extract_outline_section_keys(outline.outline_json))
+
+    return {
+        "approved_latest_claim_count": approved_latest_claim_count,
+        "confirmed_outline_count": confirmed_outline_count,
+        "sections_affected": sorted(sections_affected),
+    }
+
+
+def _extract_outline_section_keys(outline_json: Any) -> set[str]:
+    if isinstance(outline_json, dict):
+        raw_sections = outline_json.get("sections", [])
+    elif isinstance(outline_json, list):
+        raw_sections = outline_json
+    else:
+        raw_sections = []
+
+    section_keys: set[str] = set()
+    for item in raw_sections:
+        if isinstance(item, str) and item.strip():
+            section_keys.add(item.strip())
+            continue
+        if not isinstance(item, dict):
+            continue
+        section_key = item.get("sectionKey") or item.get("section_key")
+        if isinstance(section_key, str) and section_key.strip():
+            section_keys.add(section_key.strip())
+    return section_keys
 
 
 async def run_evidence_matrix_generation_task(
@@ -961,45 +1070,105 @@ async def complete_evidence_matrix_generation(
                 status_code=409,
                 details={"system_id": system.id, "section_count": 0},
             )
+        section_keys = {s.section_key for s in sections}
 
-        assets = await repository.list_assets_for_system(session, system.id)
-        if not assets:
+        # Build G4 snapshot
+        snapshot_detail = await build_g4_snapshot(session, system.id)
+
+        # Gather FigurePlans (confirmed/approved) as generation driver
+        all_plans = await repository.list_figure_plans(session, system.id)
+        confirmed_plans = [
+            p for p in all_plans
+            if p.status in ("confirmed", "approved") and p.section_key in section_keys
+        ]
+        if not confirmed_plans:
             raise AppException(
                 code=ErrorCode.CONFLICT.value,
-                message="Cannot generate evidence matrix without assets",
+                message="No confirmed figure plans with valid section_key",
                 status_code=409,
-                details={"system_id": system.id, "asset_count": 0},
+                details={"system_id": system.id},
             )
 
-        analysis_runs = await repository.list_analysis_runs_for_system(session, system.id)
-        latest_run_by_asset_id = _index_latest_succeeded_runs(analysis_runs)
+        # Index assets and runs
+        assets = await repository.list_assets_for_system(session, system.id)
+        asset_by_id = {a.id: a for a in assets}
+        plan_assets = await repository.list_figure_plan_assets_for_system(session, system.id)
+        assets_by_plan: dict[str, list[Asset]] = {}
+        for fpa, asset in plan_assets:
+            assets_by_plan.setdefault(fpa.figure_plan_id, []).append(asset)
+
+        runs = await repository.list_analysis_runs_for_system(session, system.id)
+        latest_run_by_asset = _index_latest_succeeded_runs(runs)
+        latest_run_by_plan = _index_latest_succeeded_runs_by_figure_plan_id(runs)
 
         generated_claims: list[Claim] = []
         generated_links: list[ClaimEvidenceLink] = []
-        for index, section in enumerate(sections, start=1):
-            asset = assets[(index - 1) % len(assets)]
-            analysis_run = latest_run_by_asset_id.get(asset.id)
-            claim_id = f"C{index}"
+
+        for plan in confirmed_plans:
+            claim_id = f"S{plan.section_key}-F{plan.figure_no}-1"
             version = await repository.get_next_claim_version(session, system.id, claim_id)
+
+            run = latest_run_by_plan.get(plan.id)
+            statement = _derive_claim_statement(plan, run)
+
             claim = await repository.create_claim(
                 session,
                 system_id=system.id,
                 claim_id=claim_id,
-                statement=_build_generated_claim_statement(section, asset),
-                section_ref=section.section_key,
+                statement=statement,
+                section_ref=plan.section_key,
                 confidence_level="unreviewed",
                 status="draft",
                 version=version,
             )
-            link = await repository.create_claim_evidence_link(
-                session,
-                claim_record_id=claim.id,
-                asset_id=asset.id,
-                analysis_run_id=None if analysis_run is None else analysis_run.id,
-                statistical_support={"source": "generated"},
-            )
             generated_claims.append(claim)
-            generated_links.append(link)
+
+            # Create evidence links from plan's assets
+            plan_asset_list = assets_by_plan.get(plan.id, [])
+            linked_asset_keys: set[tuple[str, str | None]] = set()
+            for asset in plan_asset_list:
+                asset_run = latest_run_by_asset.get(asset.id)
+                link_key = (asset.id, asset_run.id if asset_run else None)
+                if link_key in linked_asset_keys:
+                    continue
+                qc_status = None
+                if asset.metadata_entry and hasattr(asset.metadata_entry, "qc_status"):
+                    qc_status = asset.metadata_entry.qc_status
+                strength = compute_evidence_strength(
+                    qc_status=qc_status,
+                    has_analysis=asset_run is not None,
+                    analysis_type=asset_run.analysis_type if asset_run else None,
+                )
+                link = await repository.create_claim_evidence_link(
+                    session,
+                    claim_record_id=claim.id,
+                    asset_id=asset.id,
+                    analysis_run_id=asset_run.id if asset_run else None,
+                    statistical_support=strength,
+                )
+                generated_links.append(link)
+                linked_asset_keys.add(link_key)
+
+            # Fallback: if plan has no linked assets, use first available asset
+            if not plan_asset_list and assets:
+                fallback_asset = assets[0]
+                fallback_run = latest_run_by_asset.get(fallback_asset.id)
+                fallback_key = (fallback_asset.id, fallback_run.id if fallback_run else None)
+                strength = compute_evidence_strength(
+                    qc_status=None,
+                    has_analysis=fallback_run is not None,
+                    analysis_type=fallback_run.analysis_type if fallback_run else None,
+                )
+                if fallback_key not in linked_asset_keys:
+                    link = await repository.create_claim_evidence_link(
+                        session,
+                        claim_record_id=claim.id,
+                        asset_id=fallback_asset.id,
+                        analysis_run_id=fallback_run.id if fallback_run else None,
+                        statistical_support=strength,
+                    )
+                    generated_links.append(link)
+                    linked_asset_keys.add(fallback_key)
 
         await append_system_workflow_event(
             task_service,
@@ -1016,6 +1185,7 @@ async def complete_evidence_matrix_generation(
                     "claim_ids": [claim.id for claim in generated_claims],
                     "claim_count": len(generated_claims),
                     "link_count": len(generated_links),
+                    "snapshot_fingerprint": snapshot_detail.fingerprint,
                 },
                 context_update={
                     "claim_count": len(generated_claims),
@@ -1038,6 +1208,7 @@ async def complete_evidence_matrix_generation(
                 payload={
                     "claimCount": len(generated_claims),
                     "linkCount": len(generated_links),
+                    "snapshotFingerprint": snapshot_detail.fingerprint,
                 },
             )
     except AppException as exc:
@@ -1073,7 +1244,18 @@ async def list_claims(session: SessionLike, system_id: str) -> list[ClaimDetail]
         )
 
     claims = await repository.list_claims(session, system_id)
-    return [_build_claim_detail(claim) for claim in claims]
+    all_links = await repository.list_claim_evidence_links_for_system(session, system_id)
+    links_by_claim: dict[str, list[ClaimEvidenceLink]] = {}
+    for lnk in all_links:
+        links_by_claim.setdefault(lnk.claim_record_id, []).append(lnk)
+
+    result: list[ClaimDetail] = []
+    for claim in claims:
+        claim_links = links_by_claim.get(claim.id, [])
+        link_details = [_build_claim_evidence_link_detail(lnk) for lnk in claim_links]
+        strength_summary = _aggregate_strength_summary(claim_links)
+        result.append(_build_claim_detail(claim, link_details, strength_summary))
+    return result
 
 
 async def approve_claim(
@@ -1215,7 +1397,11 @@ async def bind_claim_evidence(
     return _build_claim_evidence_link_detail(link)
 
 
-def _build_claim_detail(claim: Claim) -> ClaimDetail:
+def _build_claim_detail(
+    claim: Claim,
+    evidence_links: list[ClaimEvidenceLinkDetail] | None = None,
+    strength_summary: dict[str, Any] | None = None,
+) -> ClaimDetail:
     return ClaimDetail(
         id=claim.id,
         system_id=claim.system_id,
@@ -1226,9 +1412,30 @@ def _build_claim_detail(claim: Claim) -> ClaimDetail:
         status=claim.status,
         version=claim.version,
         approved_at=claim.approved_at,
+        evidence_links=evidence_links or [],
+        strength_summary=strength_summary or {},
         created_at=claim.created_at,
         updated_at=claim.updated_at,
     )
+
+
+def _aggregate_strength_summary(links: list[ClaimEvidenceLink]) -> dict[str, Any]:
+    if not links:
+        return {"overall": "none", "link_count": 0}
+    strengths = []
+    for lnk in links:
+        s = lnk.statistical_support.get("strength") if lnk.statistical_support else None
+        if s:
+            strengths.append(s)
+    if not strengths:
+        return {"overall": "unknown", "link_count": len(links)}
+    priority = {"strong": 3, "medium": 2, "weak": 1}
+    best = max(strengths, key=lambda x: priority.get(x, 0))
+    return {"overall": best, "link_count": len(links), "distribution": {
+        "strong": strengths.count("strong"),
+        "medium": strengths.count("medium"),
+        "weak": strengths.count("weak"),
+    }}
 
 
 def _build_claim_evidence_link_detail(link: ClaimEvidenceLink) -> ClaimEvidenceLinkDetail:
@@ -1241,6 +1448,223 @@ def _build_claim_evidence_link_detail(link: ClaimEvidenceLink) -> ClaimEvidenceL
         created_at=link.created_at,
     )
 
+
+# ---------------------------------------------------------------------------
+# G4 Snapshot & Evidence Strength (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+async def build_g4_snapshot(
+    session: SessionLike,
+    system_id: str,
+) -> G4SnapshotDetail:
+    from app.modules.assets import repository as asset_repo
+
+    skeleton = await _get_confirmed_skeleton(session, system_id)
+    if skeleton is None:
+        raise AppException(
+            code=ErrorCode.CONFLICT.value,
+            message="No confirmed skeleton found",
+            status_code=409,
+            details={"system_id": system_id},
+        )
+
+    manifest = await asset_repo.get_latest_manifest(session, system_id)
+    plans = await repository.list_figure_plans(session, system_id)
+    confirmed_plans = [p for p in plans if p.status in ("confirmed", "approved")]
+    assets = await repository.list_assets_for_system(session, system_id)
+    runs = await repository.list_analysis_runs_for_system(session, system_id)
+    succeeded_runs = [r for r in runs if r.status == TaskStatus.SUCCEEDED.value]
+
+    plan_versions = {p.figure_no: p.version for p in confirmed_plans}
+    asset_versions = {a.id: a.updated_at.isoformat() if a.updated_at else "" for a in assets}
+    run_versions = {}
+    for r in succeeded_runs:
+        if r.asset_id:
+            run_versions[r.asset_id] = r.id
+
+    claims = await repository.list_claims(session, system_id)
+    approved_claims = [c for c in claims if c.status == "approved"]
+    links = await repository.list_claim_evidence_links_for_system(session, system_id)
+
+    fingerprint_input = json.dumps(
+        {
+            "skeleton_version": skeleton.version,
+            "manifest_version": manifest.version if manifest else None,
+            "plan_versions": plan_versions,
+            "asset_count": len(assets),
+            "run_count": len(succeeded_runs),
+            "approved_claim_ids": sorted([c.id for c in approved_claims]),
+            "evidence_link_count": len(links),
+        },
+        sort_keys=True,
+    )
+    fingerprint = hashlib.sha256(fingerprint_input.encode()).hexdigest()[:16]
+
+    snapshot = await repository.create_g4_snapshot(
+        session,
+        system_id=system_id,
+        fingerprint=fingerprint,
+        skeleton_version=skeleton.version,
+        manifest_version=manifest.version if manifest else None,
+        plan_versions_json=plan_versions,
+        asset_versions_json=asset_versions,
+        run_versions_json=run_versions,
+    )
+    return G4SnapshotDetail.model_validate(snapshot)
+
+
+async def get_latest_snapshot(
+    session: SessionLike, system_id: str
+) -> G4SnapshotDetail | None:
+    snapshot = await repository.get_latest_g4_snapshot(session, system_id)
+    if snapshot is None:
+        return None
+    return G4SnapshotDetail.model_validate(snapshot)
+
+
+def compute_evidence_strength(
+    qc_status: str | None,
+    has_analysis: bool,
+    analysis_type: str | None = None,
+) -> dict[str, Any]:
+    score = 0.0
+    factors: dict[str, Any] = {}
+    if qc_status == "confirmed":
+        score += 0.4
+        factors["qc"] = "confirmed"
+    elif qc_status == "pending":
+        score += 0.1
+        factors["qc"] = "pending"
+    else:
+        factors["qc"] = qc_status or "none"
+    if has_analysis:
+        score += 0.4
+        factors["analysis"] = True
+    else:
+        factors["analysis"] = False
+    if analysis_type == "comprehensive":
+        score += 0.2
+        factors["analysis_type"] = "comprehensive"
+    strength = "strong" if score >= 0.7 else "medium" if score >= 0.4 else "weak"
+    return {"strength": strength, "score": round(score, 2), "factors": factors}
+
+
+def _derive_claim_statement(
+    plan: FigurePlan,
+    run: AnalysisRun | None = None,
+) -> str:
+    parts: list[str] = []
+    if plan.claim_text:
+        parts.append(plan.claim_text)
+    if plan.brief_text:
+        parts.append(plan.brief_text)
+    if run and run.summary:
+        parts.append(run.summary)
+    if parts:
+        return " — ".join(parts)
+    return f"Evidence claim for Figure {plan.figure_no}: {plan.title}"
+
+
+async def detect_evidence_gaps(
+    session: SessionLike,
+    system_id: str,
+) -> list[EvidenceGapDetail]:
+    sections = await repository.list_system_sections(session, system_id)
+    claims = await repository.list_claims(session, system_id)
+    links = await repository.list_claim_evidence_links_for_system(session, system_id)
+    runs = await repository.list_analysis_runs_for_system(session, system_id)
+
+    approved_claims = [c for c in claims if c.status == "approved"]
+    pending_claims = [c for c in claims if c.status != "approved"]
+    claims_by_section: dict[str, list[Claim]] = {}
+    for c in approved_claims:
+        claims_by_section.setdefault(c.section_ref, []).append(c)
+
+    links_by_claim_id: dict[str, list[ClaimEvidenceLink]] = {}
+    for lnk in links:
+        links_by_claim_id.setdefault(lnk.claim_record_id, []).append(lnk)
+
+    asset_has_succeeded_run: dict[str, bool] = {}
+    for r in runs:
+        if r.asset_id and r.status == TaskStatus.SUCCEEDED.value:
+            asset_has_succeeded_run[r.asset_id] = True
+
+    gaps: list[EvidenceGapDetail] = []
+
+    # 1. section_uncovered / pending_approval
+    for section in sections:
+        if section.section_key not in claims_by_section:
+            pending_for_section = [
+                c for c in pending_claims if c.section_ref == section.section_key
+            ]
+            if pending_for_section:
+                gaps.append(EvidenceGapDetail(
+                    gap_type="pending_approval",
+                    severity="warning",
+                    remediation_stage="G4",
+                    section_key=section.section_key,
+                    message=f"章节 '{section.title}' 有 {len(pending_for_section)} 条待审批 Claims",
+                    suggested_action="在 Claims 审查队列中批准相关 Claims",
+                    remediation_hint="审查并批准该章节的 Claims 即可解决",
+                ))
+            else:
+                gaps.append(EvidenceGapDetail(
+                    gap_type="section_uncovered",
+                    severity="blocker",
+                    remediation_stage="G4",
+                    section_key=section.section_key,
+                    message=f"章节 '{section.title}' 无任何 Claims 覆盖",
+                    suggested_action="重新生成证据矩阵或手动添加 Claims",
+                    remediation_hint="点击「生成证据矩阵」为该章节生成 Claims",
+                ))
+
+    # 2. missing_evidence / missing_analysis / weak_evidence
+    for claim in approved_claims:
+        claim_links = links_by_claim_id.get(claim.id, [])
+        if not claim_links:
+            gaps.append(EvidenceGapDetail(
+                gap_type="missing_evidence",
+                severity="blocker",
+                remediation_stage="G2",
+                claim_id=claim.claim_id,
+                section_key=claim.section_ref,
+                message=f"Claim '{claim.claim_id}' 无任何证据链接",
+                suggested_action="返回 G2 添加资产或创建证据链接",
+                remediation_hint="在 G2 数据分析阶段为该 Claim 关联资产和分析结果",
+            ))
+            continue
+
+        for lnk in claim_links:
+            if not asset_has_succeeded_run.get(lnk.asset_id, False):
+                gaps.append(EvidenceGapDetail(
+                    gap_type="missing_analysis",
+                    severity="blocker",
+                    remediation_stage="G2",
+                    claim_id=claim.claim_id,
+                    asset_id=lnk.asset_id,
+                    message=f"Claim '{claim.claim_id}' 关联的资产无成功的分析结果",
+                    suggested_action="返回 G2 触发数据分析",
+                    remediation_hint="在 G2 分析工作台对该资产执行分析",
+                ))
+
+            strength = lnk.statistical_support.get("strength") if lnk.statistical_support else None
+            if strength == "weak":
+                gaps.append(EvidenceGapDetail(
+                    gap_type="weak_evidence",
+                    severity="warning",
+                    remediation_stage="G2",
+                    claim_id=claim.claim_id,
+                    asset_id=lnk.asset_id,
+                    message=f"Claim '{claim.claim_id}' 的证据强度较弱",
+                    suggested_action="改善 QC 状态或重新分析",
+                    remediation_hint="在 G2 重新执行分析以提升证据强度",
+                ))
+
+    return gaps
+
+
+# PLACEHOLDER_PHASE2_CONTINUED
 
 def _build_generated_claim_statement(section: SystemSection, asset: Asset) -> str:
     asset_label = asset.file_name

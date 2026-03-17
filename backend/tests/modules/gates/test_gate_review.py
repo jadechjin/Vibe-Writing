@@ -16,6 +16,7 @@ from app.persistence.models.evidence import (
     FigurePlan,
     FigurePlanAsset,
 )
+from app.persistence.models.g4_snapshot import G4Snapshot
 from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.project import Project
 from app.persistence.models.skeleton import StructureSkeleton
@@ -34,6 +35,7 @@ ALL_GATE_TABLES = [
     AnalysisRun.__table__,
     Claim.__table__,
     ClaimEvidenceLink.__table__,
+    G4Snapshot.__table__,
     Outline.__table__,
     OutlineAssetBinding.__table__,
     SectionDraft.__table__,
@@ -465,13 +467,79 @@ def test_review_gate_g4_blocks_approved_claims_with_invalid_sections(session: Se
 
     assert review.gate == GateKey.G4
     assert review.satisfied is False
-    assert [blocker.code for blocker in review.blockers] == ["approved_claim_sections_invalid"]
-    assert review.blockers[0].required_checks == [GateRequirementKey.EVIDENCE_MATRIX_READY]
-    assert review.blockers[0].details == {
+    blockers_by_code = {blocker.code: blocker for blocker in review.blockers}
+    assert set(blockers_by_code) == {
+        "approved_claim_sections_invalid",
+        "section_missing_claims",
+    }
+    assert blockers_by_code["approved_claim_sections_invalid"].required_checks == [
+        GateRequirementKey.EVIDENCE_MATRIX_READY
+    ]
+    assert blockers_by_code["approved_claim_sections_invalid"].details == {
         "invalid_claims": [
             {"claim_id": "claim-1", "section_ref": "discussion"},
         ]
     }
+    assert blockers_by_code["section_missing_claims"].details == {
+        "sections": ["results"],
+    }
+
+
+def test_review_gate_g4_keeps_snapshot_stale_as_advisory_warning(session: Session) -> None:
+    system = _create_system(session, status=SystemState.ASSETS_CONFIRMED)
+    asset = Asset(
+        project_id=system.project_id,
+        system_id=system.id,
+        asset_type="figure",
+        file_name="figure-1.png",
+        storage_key="assets/figure-1.png",
+        uploaded_by="owner-1",
+    )
+    session.add(asset)
+    session.flush()
+    session.add(
+        SystemSection(system_id=system.id, section_key="results", title="Results", order_no=1)
+    )
+    claim = Claim(
+        system_id=system.id,
+        claim_id="claim-1",
+        statement="Supported statement",
+        section_ref="results",
+        status="approved",
+    )
+    session.add(claim)
+    session.flush()
+    session.add(ClaimEvidenceLink(claim_record_id=claim.id, asset_id=asset.id))
+    outline = Outline(
+        system_id=system.id,
+        version=1,
+        outline_json={"meta": {"fingerprint": "outline-fp"}, "sections": ["results"]},
+        generated_from_claims_json=["claim-1"],
+        status="confirmed",
+    )
+    session.add(outline)
+    session.flush()
+    session.add(
+        OutlineAssetBinding(outline_id=outline.id, asset_id=asset.id, section_key="results")
+    )
+    session.add(
+        G4Snapshot(
+            system_id=system.id,
+            fingerprint="fresh-fp",
+            skeleton_version=1,
+            manifest_version=1,
+            plan_versions_json={},
+            asset_versions_json={},
+            run_versions_json={},
+        )
+    )
+    session.flush()
+
+    review = review_gate(session, system)
+
+    assert review.gate == GateKey.G4
+    assert review.satisfied is True
+    assert [blocker.code for blocker in review.blockers] == ["snapshot_stale"]
 
 
 def test_review_gate_g5_requires_latest_draft_for_every_section_to_be_approved(

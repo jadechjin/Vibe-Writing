@@ -26,6 +26,7 @@ class OutlineDetail(CamelModel):
     generated_from_claims_json: list[str] = Field(default_factory=list)
     status: str
     bindings: list[OutlineBindingDetail] = Field(default_factory=list)
+    staleness_warning: str | None = None
     approved_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

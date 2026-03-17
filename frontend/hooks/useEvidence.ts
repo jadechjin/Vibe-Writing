@@ -3,7 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { apiRequest } from "../lib/api"
-import { applySystemStateToSnapshot, type WorkflowSnapshot } from "./useProjectStatus"
+import type { G4SnapshotDetail, EvidenceGapDetail, StrengthSummary, EnhancedOutlineJson } from "../types/g4"
+
+export type { G4SnapshotDetail, EvidenceGapDetail, StrengthSummary, EnhancedOutlineJson }
 
 export type JobHandle = {
   workflow_id: string | null
@@ -21,6 +23,8 @@ export type ClaimDetail = {
   status: string
   version: number
   approvedAt: string | null
+  evidenceLinks: ClaimEvidenceLinkDetail[]
+  strengthSummary: StrengthSummary
   createdAt: string
   updatedAt: string
 }
@@ -48,10 +52,11 @@ export type OutlineDetail = {
   id: string
   systemId: string
   version: number
-  outlineJson: Record<string, unknown> | Array<Record<string, unknown>>
+  outlineJson: EnhancedOutlineJson | Record<string, unknown> | Array<Record<string, unknown>>
   status: string
   generatedFromClaimsJson: string[]
   bindings: OutlineAssetBindingDetail[]
+  stalenessWarning: string | null
   approvedAt: string | null
   createdAt: string
   updatedAt: string
@@ -80,16 +85,12 @@ export type ClaimEvidenceLinkInput = {
 const evidenceKeys = {
   claims: (systemId: string) => ["claims", systemId] as const,
   outlines: (systemId: string) => ["outlines", systemId] as const,
+  g4Snapshot: (systemId: string) => ["g4-snapshot", systemId] as const,
+  evidenceGaps: (systemId: string) => ["evidence-gaps", systemId] as const,
 }
 
-function updateWorkflowSnapshotState(
-  queryClient: ReturnType<typeof useQueryClient>,
-  systemId: string,
-  systemState: string,
-) {
-  queryClient.setQueryData<WorkflowSnapshot | null>(["workflow", systemId], (current) =>
-    applySystemStateToSnapshot(current ?? null, systemState),
-  )
+export type GenerateEvidenceMatrixInput = {
+  forceRegenerate?: boolean
 }
 
 export function useClaims(systemId: string) {
@@ -112,11 +113,12 @@ export function useGenerateEvidenceMatrix(systemId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () =>
+    mutationFn: (input: GenerateEvidenceMatrixInput = {}) =>
       apiRequest<EvidenceMatrixGenerateAcceptedResponse>(
         `/systems/${systemId}/evidence-matrix/generate`,
         {
           method: "POST",
+          body: JSON.stringify(input.forceRegenerate ? { forceRegenerate: true } : {}),
         },
       ),
     onSuccess: () => {
@@ -184,7 +186,6 @@ export function useConfirmOutline(systemId: string) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: evidenceKeys.outlines(systemId) })
-      updateWorkflowSnapshotState(queryClient, systemId, "Outline_Ready")
       queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
     },
   })
@@ -201,6 +202,7 @@ export function useCreateOutlineBinding(systemId: string) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: evidenceKeys.outlines(systemId) })
+      queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
     },
   })
 }
@@ -223,5 +225,41 @@ export function useBatchApproveClaims(systemId: string) {
       queryClient.invalidateQueries({ queryKey: evidenceKeys.claims(systemId) })
       queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
     },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// G4 Snapshot & Evidence Gaps hooks
+// ---------------------------------------------------------------------------
+
+export function useG4Snapshot(systemId: string) {
+  return useQuery({
+    queryKey: evidenceKeys.g4Snapshot(systemId),
+    queryFn: () => apiRequest<G4SnapshotDetail | null>(`/systems/${systemId}/g4-snapshot`),
+    enabled: !!systemId,
+  })
+}
+
+export function useRebuildG4Snapshot(systemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<G4SnapshotDetail>(`/systems/${systemId}/g4-snapshot`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: evidenceKeys.g4Snapshot(systemId) })
+      queryClient.invalidateQueries({ queryKey: evidenceKeys.evidenceGaps(systemId) })
+      queryClient.invalidateQueries({ queryKey: ["workflow", systemId] })
+    },
+  })
+}
+
+export function useEvidenceGaps(systemId: string) {
+  return useQuery({
+    queryKey: evidenceKeys.evidenceGaps(systemId),
+    queryFn: () => apiRequest<EvidenceGapDetail[]>(`/systems/${systemId}/evidence-gaps`),
+    enabled: !!systemId,
   })
 }

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.common.enums import GATE_REQUIREMENTS, GateKey, GateRequirementKey, SystemState, TaskStatus
 from app.common.schemas import Blocker, GateReview
-from app.persistence.models.asset import Asset
+from app.persistence.models.asset import Asset, AssetMetadata
 from app.persistence.models.draft import Outline, OutlineAssetBinding, SectionDraft
 from app.persistence.models.evidence import (
     AnalysisRun,
@@ -16,6 +16,7 @@ from app.persistence.models.evidence import (
     FigurePlan,
     FigurePlanAsset,
 )
+from app.persistence.models.g4_snapshot import G4Snapshot
 from app.persistence.models.manifest import AssetManifest
 from app.persistence.models.skeleton import StructureSkeleton
 from app.persistence.models.system import ExperimentalSystem, SystemSection
@@ -34,6 +35,7 @@ ACTIVE_GATE_BY_STATE: dict[str, GateKey] = {
     SystemState.CHAPTER_REVIEW.value: GateKey.G5,
     SystemState.CHAPTER_APPROVED.value: GateKey.G5,
 }
+NON_BLOCKING_BLOCKER_CODES = {"snapshot_stale"}
 
 
 def resolve_active_gate(system: ExperimentalSystem) -> GateKey:
@@ -60,9 +62,13 @@ def review_gate(
     else:
         blockers = check_chapter_approved(session, system)
 
+    blocking_blockers = [
+        blocker for blocker in blockers if blocker.code not in NON_BLOCKING_BLOCKER_CODES
+    ]
+
     return GateReview(
         gate=active_gate,
-        satisfied=len(blockers) == 0,
+        satisfied=len(blocking_blockers) == 0,
         required_checks=list(GATE_REQUIREMENTS[active_gate]),
         blockers=blockers,
     )
@@ -218,15 +224,47 @@ def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list
     latest_manifest = _latest_single_by_version(manifests)
     manifest_status = latest_manifest.status if latest_manifest is not None else None
 
-    if not _is_confirmed_status(manifest_status):
+    assets = session.scalars(
+        select(Asset).where(Asset.system_id == system.id)
+    ).all()
+    metadata_rows = session.scalars(
+        select(AssetMetadata).join(Asset, AssetMetadata.asset_id == Asset.id).where(
+            Asset.system_id == system.id
+        )
+    ).all()
+    metadata_by_asset_id = {metadata.asset_id: metadata for metadata in metadata_rows}
+    missing_metadata_asset_ids = [
+        asset.id
+        for asset in assets
+        if not (metadata_by_asset_id.get(asset.id) and (metadata_by_asset_id[asset.id].semantic_description or "").strip())
+    ]
+    pending_qc_asset_ids = [
+        asset.id
+        for asset in assets
+        if not _is_confirmed_status(
+            metadata_by_asset_id.get(asset.id).qc_status
+            if metadata_by_asset_id.get(asset.id) is not None
+            else None
+        )
+    ]
+
+    if (
+        not _is_confirmed_status(manifest_status)
+        or missing_metadata_asset_ids
+        or pending_qc_asset_ids
+    ):
         blockers.append(
             _build_blocker(
-                code="manifest_not_confirmed",
-                message="Manifest is not confirmed.",
+                code="assets_not_confirmed",
+                message="Assets are not confirmed.",
                 gate=GateKey.G3,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.ASSETS_CONFIRMED],
-                details={"manifest_status": manifest_status},
+                details={
+                    "manifest_status": manifest_status,
+                    "missing_metadata_asset_ids": missing_metadata_asset_ids,
+                    "pending_qc_asset_ids": pending_qc_asset_ids,
+                },
             )
         )
 
@@ -290,14 +328,16 @@ def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list
 def check_evidence_and_outline_ready(session: Session, system: ExperimentalSystem) -> list[Blocker]:
     blockers: list[Blocker] = []
 
+    sections = session.scalars(
+        select(SystemSection).where(SystemSection.system_id == system.id)
+    ).all()
+    allowed_section_keys = {s.section_key for s in sections}
+
     claims = session.scalars(select(Claim).where(Claim.system_id == system.id)).all()
     latest_claims = _latest_by_version(claims, key=lambda item: item.claim_id)
     approved_claims = [claim for claim in latest_claims if _is_approved_status(claim.status)]
-    allowed_section_keys = set(
-        session.scalars(
-            select(SystemSection.section_key).where(SystemSection.system_id == system.id)
-        ).all()
-    )
+
+    # Existing: invalid section_ref check
     invalid_section_claims = [
         {"claim_id": claim.claim_id, "section_ref": claim.section_ref}
         for claim in approved_claims
@@ -315,6 +355,26 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
             )
         )
 
+    # NEW (4.1): per-section check — every section needs ≥1 approved claim
+    claims_by_section: dict[str, list[Claim]] = {}
+    for claim in approved_claims:
+        claims_by_section.setdefault(claim.section_ref, []).append(claim)
+    sections_missing_claims = [
+        s.section_key for s in sections if s.section_key not in claims_by_section
+    ]
+    if sections_missing_claims:
+        blockers.append(
+            _build_blocker(
+                code="section_missing_claims",
+                message="Some sections have no approved claims.",
+                gate=GateKey.G4,
+                current_state=system.status,
+                required_checks=[GateRequirementKey.EVIDENCE_MATRIX_READY],
+                details={"sections": sections_missing_claims},
+            )
+        )
+
+    # Existing: evidence link check
     approved_claim_ids = [claim.id for claim in approved_claims]
     linked_claim_ids = (
         set(
@@ -348,20 +408,26 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
 
     outlines = session.scalars(select(Outline).where(Outline.system_id == system.id)).all()
     latest_outline = _latest_single_by_version(outlines)
-    binding_count = 0
+
+    # NEW (4.2): per-section binding check
+    bindings: list[OutlineAssetBinding] = []
     if latest_outline is not None:
-        binding_count = len(
+        bindings = list(
             session.scalars(
                 select(OutlineAssetBinding).where(
                     OutlineAssetBinding.outline_id == latest_outline.id
                 )
             ).all()
         )
+    bound_sections = {b.section_key for b in bindings}
+    sections_missing_binding = [
+        s.section_key for s in sections if s.section_key not in bound_sections
+    ]
 
     outline_ready = (
         latest_outline is not None
         and _is_confirmed_status(latest_outline.status)
-        and binding_count > 0
+        and len(bindings) > 0
     )
     if not outline_ready:
         blockers.append(
@@ -376,10 +442,50 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
                     "outline_version": latest_outline.version
                     if latest_outline is not None
                     else None,
-                    "binding_count": binding_count,
+                    "binding_count": len(bindings),
                 },
             )
         )
+    elif sections_missing_binding:
+        blockers.append(
+            _build_blocker(
+                code="section_missing_binding",
+                message="Some sections have no outline binding.",
+                gate=GateKey.G4,
+                current_state=system.status,
+                required_checks=[GateRequirementKey.OUTLINE_READY],
+                details={"sections": sections_missing_binding},
+            )
+        )
+
+    # NEW (4.3): staleness detection (warning level)
+    if latest_outline is not None and _is_confirmed_status(latest_outline.status):
+        outline_json = latest_outline.outline_json or {}
+        outline_fp = (outline_json.get("meta") or {}).get("fingerprint") if isinstance(outline_json, dict) else None
+        if outline_fp:
+            latest_snapshot = session.scalars(
+                select(G4Snapshot)
+                .where(G4Snapshot.system_id == system.id)
+                .order_by(G4Snapshot.created_at.desc())
+                .limit(1)
+            ).first()
+            if latest_snapshot and latest_snapshot.fingerprint != outline_fp:
+                blockers.append(
+                    _build_blocker(
+                        code="snapshot_stale",
+                        message=(
+                            "Outline is based on outdated data."
+                            " Regeneration recommended but not required."
+                        ),
+                        gate=GateKey.G4,
+                        current_state=system.status,
+                        required_checks=[GateRequirementKey.OUTLINE_READY],
+                        details={
+                            "outline_fingerprint": outline_fp,
+                            "current_fingerprint": latest_snapshot.fingerprint,
+                        },
+                    )
+                )
 
     return blockers
 

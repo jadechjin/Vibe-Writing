@@ -119,17 +119,15 @@ describe("DraftPanel smoke coverage", () => {
       />,
     )
 
-    expect(screen.getByText("Chapter Drafting & Review")).toBeInTheDocument()
-    expect(screen.getByText("Approved Sections")).toBeInTheDocument()
-    expect(screen.getAllByText("Needs Review").length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText("Ready to Generate")).toBeInTheDocument()
+    expect(screen.getByText("章节起草与审阅")).toBeInTheDocument()
+    expect(screen.getByText("已通过章节")).toBeInTheDocument()
+    expect(screen.getAllByText("待审阅").length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText("待生成").length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText(/Looks good to publish\./)).toBeInTheDocument()
-    expect(screen.getByText("Approve")).toBeInTheDocument()
-    expect(screen.getByText("Request Changes")).toBeInTheDocument()
-    expect(screen.getAllByText(/Preview is collapsed by default\./).length).toBeGreaterThanOrEqual(1)
-    expect(
-      screen.getAllByText(/No preview is available yet because this section does not have a latest draft\./).length,
-    ).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText("通过")).toBeInTheDocument()
+    expect(screen.getByText("请求修改")).toBeInTheDocument()
+    expect(screen.getAllByText(/预览默认收起，需要查看最新草稿内容时展开。/).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/该章节尚无最新草稿，暂无预览。/).length).toBeGreaterThanOrEqual(1)
   })
 
   it("proves latest draft selection ignores array order and uses updatedAt as tie-breaker", () => {
@@ -169,8 +167,9 @@ describe("DraftPanel smoke coverage", () => {
       />,
     )
 
-    expect(screen.getByText("Approved Sections")).toBeInTheDocument()
-    expect(screen.getByText(/Approved: /)).toBeInTheDocument()
+    expect(screen.getByText("已通过章节")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "展开预览" }))
+    expect(screen.getByText(/Newer intro draft/)).toBeInTheDocument()
     expect(screen.queryByText(/Older intro draft/)).not.toBeInTheDocument()
   })
 
@@ -200,13 +199,11 @@ describe("DraftPanel smoke coverage", () => {
       />,
     )
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Generate Draft" })[0])
+    fireEvent.click(screen.getAllByRole("button", { name: "生成草稿" })[0])
 
     expect(generateDraftMutate).toHaveBeenCalledTimes(1)
-    expect(
-      screen.getByText(/Draft generation has been queued\. This local success note clears when refreshed draft truth arrives\./),
-    ).toBeInTheDocument()
-    expect(screen.getAllByText(/No latest draft recorded for this section yet\./).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/草稿生成已排队。刷新后此提示将自动清除。/)).toBeInTheDocument()
+    expect(screen.getAllByText(/该章节尚无最新草稿，暂无预览。/).length).toBeGreaterThanOrEqual(1)
 
     rerender(
       <DraftPanel
@@ -222,9 +219,7 @@ describe("DraftPanel smoke coverage", () => {
       />,
     )
 
-    expect(
-      screen.getByText(/Draft generation has been queued\. This local success note clears when refreshed draft truth arrives\./),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/草稿生成已排队。刷新后此提示将自动清除。/)).toBeInTheDocument()
 
     mockedUseDrafts.mockReturnValue(
       createQueryHookResult([
@@ -253,10 +248,8 @@ describe("DraftPanel smoke coverage", () => {
       />,
     )
 
-    expect(
-      screen.queryByText(/Draft generation has been queued\. This local success note clears when refreshed draft truth arrives\./),
-    ).not.toBeInTheDocument()
-    expect(screen.getByText(/Claims used: 1 · Version 1/)).toBeInTheDocument()
+    expect(screen.queryByText(/草稿生成已排队。刷新后此提示将自动清除。/)).not.toBeInTheDocument()
+    expect(screen.getByText(/使用 Claims：1 · 版本 1/)).toBeInTheDocument()
   })
 
   it("keeps G5 disabled helper reasons local and prioritized", () => {
@@ -283,8 +276,6 @@ describe("DraftPanel smoke coverage", () => {
       />,
     )
 
-    expect(
-      screen.getAllByText(/Generate draft is unavailable until the latest outline is confirmed in G4\./)[0],
-    ).toBeInTheDocument()
+    expect(screen.getAllByText(/在 G4 确认最新提纲前，无法生成草稿。/)[0]).toBeInTheDocument()
   })
 })

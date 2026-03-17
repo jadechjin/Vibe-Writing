@@ -225,8 +225,15 @@ async def get_workflow_snapshot(
     )
     event_result = await _maybe_await(session.execute(event_statement))
     events = list(event_result.scalars().all())
+    snapshot = _build_workflow_snapshot(instance, events)
+    active_gate = resolve_active_gate(system)
+    gate_review = await _review_gate(session, system, active_gate)
 
-    return _build_workflow_snapshot(instance, events)
+    snapshot.current_state = system.status
+    snapshot.current_gate = active_gate.value
+    snapshot.latest_blockers = gate_review.blockers
+
+    return snapshot
 
 
 async def advance_system(

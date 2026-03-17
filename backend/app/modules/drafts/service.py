@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+from datetime import UTC, datetime
 from inspect import isawaitable
 from typing import Any, TypeVar
 
@@ -28,6 +31,8 @@ from app.modules.drafts.schemas import (
 )
 from app.modules.tasks.service import TaskWorkflowService
 from app.persistence.models import Claim, Outline, OutlineAssetBinding, ReviewComment, SectionDraft
+from app.persistence.models.evidence import AnalysisRun, ClaimEvidenceLink
+from app.persistence.models.system import SystemSection
 from app.realtime.broadcaster import TaskBroadcaster
 from app.workflows.system_workflow import (
     WorkflowCommand,
@@ -170,13 +175,26 @@ async def complete_outline_generation(
             )
 
         claims = await _list_approved_claims_for_system(session, system.id)
+
+        # Fetch evidence links and snapshot fingerprint for enhanced outline
+        from app.modules.evidence import repository as evidence_repo
+        all_links = await evidence_repo.list_claim_evidence_links_for_system(session, system.id)
+        snapshot = await evidence_repo.get_latest_g4_snapshot(session, system.id)
+        fingerprint = snapshot.fingerprint if snapshot else None
+
+        sections = await evidence_repo.list_system_sections(session, system.id)
+        all_runs = await evidence_repo.list_analysis_runs_for_system(session, system.id)
+        succeeded_runs = [r for r in all_runs if r.status == "succeeded"]
+
         version = await repository.get_next_outline_version(session, system.id)
         outline = await repository.create_outline(
             session,
             system_id=system.id,
             version=version,
             status="draft",
-            outline_json=_build_generated_outline_json(claims),
+            outline_json=_build_generated_outline_json(
+                sections, claims, all_links, succeeded_runs, fingerprint,
+            ),
             generated_from_claims_json=[claim.id for claim in claims],
         )
 
@@ -271,11 +289,66 @@ async def confirm_outline(
             details={"outline_id": outline_id},
         )
 
+    # Coverage validation: every section needs ≥1 binding
+    bindings = await repository.list_outline_bindings(session, outline_id)
+    sections = await repository.list_system_sections(session, outline.system_id)
+    bound_sections = {b.section_key for b in bindings}
+    missing_bindings = [s for s in sections if s.section_key not in bound_sections]
+    if missing_bindings:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message="Every section needs at least one binding before confirming",
+            status_code=422,
+            details={
+                "outline_id": outline_id,
+                "missing_sections": [s.section_key for s in missing_bindings],
+            },
+        )
+
+    # Coverage validation: every referenced claim needs ≥1 evidence link
+    outline_json = outline.outline_json or {}
+    referenced_claim_ids: set[str] = set()
+    for sec in outline_json.get("sections", []):
+        for cid in sec.get("claimIds", sec.get("claim_ids", [])):
+            referenced_claim_ids.add(cid)
+    if referenced_claim_ids:
+        from app.modules.evidence import repository as evidence_repo
+        all_links = await evidence_repo.list_claim_evidence_links_for_system(
+            session, outline.system_id
+        )
+        claims_with_links = {lnk.claim_record_id for lnk in all_links}
+        claims_without_links = referenced_claim_ids - claims_with_links
+        if claims_without_links:
+            raise AppException(
+                code=ErrorCode.VALIDATION_ERROR.value,
+                message="Referenced claims must have at least one evidence link",
+                status_code=422,
+                details={
+                    "outline_id": outline_id,
+                    "claims_without_links": list(claims_without_links),
+                },
+            )
+
+    # Staleness detection (warning only, stored in response)
+    staleness_warning: str | None = None
+    outline_fingerprint = (outline_json.get("meta") or {}).get("fingerprint")
+    if outline_fingerprint:
+        from app.modules.evidence import repository as evidence_repo
+        snapshot = await evidence_repo.get_latest_g4_snapshot(session, outline.system_id)
+        if snapshot and snapshot.fingerprint != outline_fingerprint:
+            staleness_warning = (
+                f"Outline fingerprint ({outline_fingerprint}) does not match "
+                f"current snapshot ({snapshot.fingerprint}). Consider regenerating."
+            )
+
     target_status = payload.status if payload is not None else "confirmed"
     outline = await repository.update_outline_status(session, outline, target_status)
     await _maybe_await(session.commit())
 
-    return await _build_outline_detail_with_bindings(session, outline)
+    detail = await _build_outline_detail_with_bindings(session, outline)
+    if staleness_warning:
+        detail.staleness_warning = staleness_warning
+    return detail
 
 
 async def bind_outline_assets(
@@ -866,17 +939,172 @@ async def _list_approved_claims_for_system(session: SessionLike, system_id: str)
     return list(result.scalars().all())
 
 
-def _build_generated_outline_json(claims: list[Claim]) -> dict[str, Any]:
-    sections: dict[str, list[str]] = {}
-    for claim in claims:
-        sections.setdefault(claim.section_ref, []).append(claim.id)
-
-    return {
-        "sections": [
-            {"section_key": section_key, "claim_ids": claim_ids}
-            for section_key, claim_ids in sections.items()
-        ]
+def _build_generated_outline_json(
+    sections: list[SystemSection],
+    claims: list[Claim],
+    links: list[ClaimEvidenceLink] | None = None,
+    runs: list[AnalysisRun] | None = None,
+    fingerprint: str | None = None,
+) -> dict[str, Any]:
+    meta: dict[str, Any] = {
+        "generatedAt": datetime.now(UTC).isoformat(),
     }
+    if fingerprint:
+        meta["fingerprint"] = fingerprint
+    meta["claimRefs"] = [
+        {"claimId": c.claim_id, "version": c.version} for c in claims
+    ]
+    meta["inputSummary"] = {
+        "sectionCount": len(sections),
+        "claimCount": len(claims),
+        "linkCount": len(links or []),
+        "runCount": len(runs or []),
+    }
+
+    links_by_claim: dict[str, list[ClaimEvidenceLink]] = {}
+    for lnk in (links or []):
+        links_by_claim.setdefault(lnk.claim_record_id, []).append(lnk)
+
+    claims_by_section: dict[str, list[Claim]] = {}
+    for claim in claims:
+        claims_by_section.setdefault(claim.section_ref, []).append(claim)
+
+    runs_by_id: dict[str, AnalysisRun] = {}
+    for r in (runs or []):
+        runs_by_id[r.id] = r
+
+    sections_out: list[dict[str, Any]] = []
+    for section in sections:
+        section_claims = claims_by_section.get(section.section_key, [])
+
+        evidence_link_refs: list[dict[str, Any]] = []
+        linked_run_ids: set[str] = set()
+        for claim in section_claims:
+            for lnk in links_by_claim.get(claim.id, []):
+                strength = (
+                    lnk.statistical_support.get("strength")
+                    if lnk.statistical_support
+                    else None
+                )
+                evidence_link_refs.append({
+                    "claimId": claim.claim_id,
+                    "assetId": lnk.asset_id,
+                    "strength": strength or "unknown",
+                })
+                if lnk.analysis_run_id:
+                    linked_run_ids.add(lnk.analysis_run_id)
+
+        analysis_run_refs: list[dict[str, Any]] = []
+        for run_id in linked_run_ids:
+            run = runs_by_id.get(run_id)
+            if run is not None:
+                analysis_run_refs.append({
+                    "runId": run.id,
+                    "status": run.status,
+                    "summary": run.summary,
+                })
+
+        has_claims = len(section_claims) > 0
+        has_links = len(evidence_link_refs) > 0
+        if has_claims and has_links:
+            coverage = "covered"
+        elif has_claims:
+            coverage = "partial"
+        else:
+            coverage = "uncovered"
+
+        nodes = _build_outline_nodes(section_claims, links_by_claim)
+        binding_suggestions = _suggest_outline_bindings_for_section(
+            section_claims, links_by_claim
+        )
+        sections_out.append({
+            "sectionKey": section.section_key,
+            "sectionTitle": section.title,
+            "claimIds": [c.id for c in section_claims],
+            "evidenceLinkRefs": evidence_link_refs,
+            "analysisRunRefs": analysis_run_refs,
+            "nodes": nodes,
+            "bindingSuggestions": binding_suggestions,
+            "coverage": coverage,
+        })
+
+    return {"meta": meta, "sections": sections_out}
+
+
+def _infer_node_type(claim: Claim) -> str:
+    text = (claim.statement or "").lower()
+    if any(kw in text for kw in ("背景", "综述", "文献", "background", "literature", "review")):
+        return "background"
+    if any(kw in text for kw in ("方法", "实验", "材料", "method", "experiment", "material")):
+        return "method"
+    if any(kw in text for kw in ("结果", "数据", "图", "result", "data", "figure")):
+        return "result"
+    return "summary"
+
+
+def _get_claim_strength(
+    claim: Claim, links_by_claim: dict[str, list[ClaimEvidenceLink]]
+) -> str:
+    claim_links = links_by_claim.get(claim.id, [])
+    if not claim_links:
+        return "none"
+    strengths = []
+    for lnk in claim_links:
+        s = lnk.statistical_support.get("strength") if lnk.statistical_support else None
+        if s:
+            strengths.append(s)
+    if not strengths:
+        return "unknown"
+    priority = {"strong": 3, "medium": 2, "weak": 1}
+    return max(strengths, key=lambda x: priority.get(x, 0))
+
+
+def _build_outline_nodes(
+    section_claims: list[Claim],
+    links_by_claim: dict[str, list[ClaimEvidenceLink]],
+) -> list[dict[str, Any]]:
+    by_type: dict[str, list[dict[str, Any]]] = {}
+    for claim in section_claims:
+        node_type = _infer_node_type(claim)
+        strength = _get_claim_strength(claim, links_by_claim)
+        entry = {"claimId": claim.claim_id, "strength": strength}
+        by_type.setdefault(node_type, []).append(entry)
+
+    nodes: list[dict[str, Any]] = []
+    for node_type in ("background", "method", "result", "summary"):
+        entries = by_type.get(node_type, [])
+        if entries:
+            best_strength = max(
+                (e["strength"] for e in entries),
+                key=lambda x: {"strong": 3, "medium": 2, "weak": 1, "none": 0}.get(x, 0),
+            )
+            nodes.append({
+                "nodeType": node_type,
+                "claimIds": [e["claimId"] for e in entries],
+                "evidenceStrength": best_strength,
+            })
+    return nodes
+
+
+def _suggest_outline_bindings_for_section(
+    section_claims: list[Claim],
+    links_by_claim: dict[str, list[ClaimEvidenceLink]],
+) -> list[dict[str, Any]]:
+    scored_assets: dict[str, float] = {}
+    for claim in section_claims:
+        for lnk in links_by_claim.get(claim.id, []):
+            score = 0.0
+            if lnk.statistical_support:
+                score = lnk.statistical_support.get("score", 0.0)
+            current = scored_assets.get(lnk.asset_id, 0.0)
+            if score > current:
+                scored_assets[lnk.asset_id] = score
+
+    ranked = sorted(scored_assets.items(), key=lambda x: x[1], reverse=True)[:3]
+    return [
+        {"assetId": asset_id, "reason": f"Highest strength evidence (score={score})"}
+        for asset_id, score in ranked
+    ]
 
 
 def _build_generated_section_draft_content(section_key: str, claims: list[Claim]) -> str:
@@ -913,9 +1141,9 @@ def _resolve_requested_claim_ids(
     for section_entry in sections_payload:
         if not isinstance(section_entry, dict):
             continue
-        if section_entry.get("section_key") != section_key:
+        if section_entry.get("sectionKey", section_entry.get("section_key")) != section_key:
             continue
-        claim_ids = section_entry.get("claim_ids")
+        claim_ids = section_entry.get("claimIds", section_entry.get("claim_ids"))
         if not isinstance(claim_ids, list):
             return []
         return [claim_id for claim_id in claim_ids if isinstance(claim_id, str)]

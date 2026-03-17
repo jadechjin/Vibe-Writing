@@ -91,6 +91,8 @@ class ClaimDetail(CamelModel):
     status: str
     version: int
     approved_at: datetime | None = None
+    evidence_links: list["ClaimEvidenceLinkDetail"] = Field(default_factory=list)
+    strength_summary: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 
@@ -116,6 +118,19 @@ class ClaimEvidenceLinkCreateRequest(CamelModel):
 
 class EvidenceMatrixGenerateAcceptedResponse(CamelModel):
     handle: JobHandle
+    invalidation_summary: "EvidenceMatrixInvalidationSummary | None" = None
+
+
+class EvidenceMatrixGenerateRequest(CamelModel):
+    force_regenerate: bool = False
+
+
+class EvidenceMatrixInvalidationSummary(CamelModel):
+    approved_latest_claim_count: int = 0
+    confirmed_outline_count: int = 0
+    sections_affected: list[str] = Field(default_factory=list)
+    will_invalidate_claim_approvals: bool = False
+    will_invalidate_outlines: bool = False
 
 
 class BatchApproveClaimsRequest(CamelModel):
@@ -178,6 +193,36 @@ class ChatImageUploadResponse(CamelModel):
     preview_url: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# G4 Snapshot & Evidence Gap schemas
+# ---------------------------------------------------------------------------
+
+
+class G4SnapshotDetail(CamelModel):
+    id: str
+    system_id: str
+    fingerprint: str
+    skeleton_version: int
+    manifest_version: int | None = None
+    plan_versions_json: dict[str, Any] = Field(default_factory=dict)
+    asset_versions_json: dict[str, Any] = Field(default_factory=dict)
+    run_versions_json: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class EvidenceGapDetail(CamelModel):
+    gap_type: str
+    severity: str = "warning"
+    remediation_stage: str = "G4"
+    claim_id: str | None = None
+    section_key: str | None = None
+    asset_id: str | None = None
+    message: str
+    suggested_action: str
+    remediation_hint: str = ""
+
+
 __all__ = [
     "BatchApproveClaimsRequest",
     "BatchApproveClaimsResponse",
@@ -189,7 +234,11 @@ __all__ = [
     "ClaimDetail",
     "ClaimEvidenceLinkCreateRequest",
     "ClaimEvidenceLinkDetail",
+    "EvidenceGapDetail",
     "EvidenceMatrixGenerateAcceptedResponse",
+    "EvidenceMatrixInvalidationSummary",
+    "EvidenceMatrixGenerateRequest",
+    "G4SnapshotDetail",
     "FigurePlanAssetDetail",
     "FigurePlanConfirmRequest",
     "FigurePlanDetail",

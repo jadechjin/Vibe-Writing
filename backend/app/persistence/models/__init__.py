@@ -2,6 +2,7 @@
 
 from app.persistence.models.asset import Asset, AssetMetadata
 from app.persistence.models.draft import Outline, OutlineAssetBinding, ReviewComment, SectionDraft
+from app.persistence.models.g4_snapshot import G4Snapshot
 from app.persistence.models.evidence import (
     AnalysisRun,
     Claim,
@@ -27,6 +28,7 @@ __all__ = [
     "ClaimEvidenceLink",
     "ExperimentalSystem",
     "FigurePlan",
+    "G4Snapshot",
     "FigurePlanAsset",
     "FigurePlanChatMessage",
     "FigurePlanChatSession",

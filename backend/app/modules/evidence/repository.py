@@ -17,6 +17,7 @@ from app.persistence.models import (
     FigurePlanAsset,
     FigurePlanChatMessage,
     FigurePlanChatSession,
+    G4Snapshot,
     SystemSection,
 )
 
@@ -557,6 +558,47 @@ async def update_chat_message_fields(
     return message
 
 
+# ---------------------------------------------------------------------------
+# G4Snapshot CRUD
+# ---------------------------------------------------------------------------
+
+
+async def create_g4_snapshot(
+    session: SessionLike,
+    *,
+    system_id: str,
+    fingerprint: str,
+    skeleton_version: int,
+    manifest_version: int | None = None,
+    plan_versions_json: dict | None = None,
+    asset_versions_json: dict | None = None,
+    run_versions_json: dict | None = None,
+) -> G4Snapshot:
+    snapshot = G4Snapshot(
+        system_id=system_id,
+        fingerprint=fingerprint,
+        skeleton_version=skeleton_version,
+        manifest_version=manifest_version,
+        plan_versions_json=plan_versions_json or {},
+        asset_versions_json=asset_versions_json or {},
+        run_versions_json=run_versions_json or {},
+    )
+    session.add(snapshot)
+    await _maybe_await(session.flush())
+    return snapshot
+
+
+async def get_latest_g4_snapshot(session: SessionLike, system_id: str) -> G4Snapshot | None:
+    statement = (
+        select(G4Snapshot)
+        .where(G4Snapshot.system_id == system_id)
+        .order_by(G4Snapshot.created_at.desc(), G4Snapshot.id.desc())
+        .limit(1)
+    )
+    result = await _maybe_await(session.execute(statement))
+    return result.scalar_one_or_none()
+
+
 __all__ = [
     "create_chat_message",
     "create_chat_session",
@@ -565,6 +607,7 @@ __all__ = [
     "create_claim_evidence_link",
     "create_figure_plan",
     "create_figure_plan_asset",
+    "create_g4_snapshot",
     "delete_figure_plan",
     "delete_figure_plan_asset",
     "get_active_chat_session",
@@ -574,6 +617,7 @@ __all__ = [
     "get_figure_plan",
     "get_figure_plan_asset",
     "get_figure_plan_asset_by_asset_id",
+    "get_latest_g4_snapshot",
     "get_next_claim_version",
     "get_next_figure_plan_version",
     "get_next_turn_index",

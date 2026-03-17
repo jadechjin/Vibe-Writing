@@ -26,7 +26,9 @@ from app.modules.evidence.schemas import (
     ClaimDetail,
     ClaimEvidenceLinkCreateRequest,
     ClaimEvidenceLinkDetail,
+    EvidenceGapDetail,
     EvidenceMatrixGenerateAcceptedResponse,
+    EvidenceMatrixGenerateRequest,
     FigurePlanAssetDetail,
     FigurePlanConfirmRequest,
     FigurePlanDetail,
@@ -35,6 +37,7 @@ from app.modules.evidence.schemas import (
     FigurePlanPatchRequest,
     FigurePlanStatusTransitionRequest,
     FigurePlanUpdateBriefRequest,
+    G4SnapshotDetail,
 )
 from app.modules.evidence.service import (
     EVIDENCE_TASK_START_DELAY_SECONDS,
@@ -101,6 +104,15 @@ from app.modules.evidence.service import (
 )
 from app.modules.evidence.service import (
     upload_figure_plan_asset as upload_figure_plan_asset_service,
+)
+from app.modules.evidence.service import (
+    build_g4_snapshot as build_g4_snapshot_service,
+)
+from app.modules.evidence.service import (
+    detect_evidence_gaps as detect_evidence_gaps_service,
+)
+from app.modules.evidence.service import (
+    get_latest_snapshot as get_latest_snapshot_service,
 )
 from app.persistence import get_db_session
 
@@ -233,11 +245,17 @@ async def transition_figure_plan_status(
 )
 async def generate_evidence_matrix(
     system_id: str,
+    payload: EvidenceMatrixGenerateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[EvidenceMatrixGenerateAcceptedResponse]:
     broadcaster = get_broadcaster(request)
-    result = await generate_evidence_matrix_service(session, system_id, broadcaster)
+    result = await generate_evidence_matrix_service(
+        session,
+        system_id,
+        broadcaster,
+        force_regenerate=payload.force_regenerate,
+    )
     bind, use_async_session = get_evidence_task_session_bind(session)
     asyncio.create_task(
         run_evidence_matrix_generation_task(
@@ -431,3 +449,46 @@ async def list_chat_messages(
         scope,
     )
     return ApiResponse(data=messages)
+
+
+# ---------------------------------------------------------------------------
+# G4 Snapshot & Evidence Gaps endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/systems/{system_id}/g4-snapshot",
+    response_model=ApiResponse[G4SnapshotDetail | None],
+)
+async def get_g4_snapshot(
+    system_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[G4SnapshotDetail | None]:
+    result = await get_latest_snapshot_service(session, system_id)
+    return ApiResponse(data=result)
+
+
+@router.post(
+    "/systems/{system_id}/g4-snapshot",
+    response_model=ApiResponse[G4SnapshotDetail],
+    status_code=status.HTTP_201_CREATED,
+)
+async def rebuild_g4_snapshot(
+    system_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[G4SnapshotDetail]:
+    result = await build_g4_snapshot_service(session, system_id)
+    await session.commit()
+    return ApiResponse(data=result)
+
+
+@router.get(
+    "/systems/{system_id}/evidence-gaps",
+    response_model=ApiResponse[list[EvidenceGapDetail]],
+)
+async def get_evidence_gaps(
+    system_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[list[EvidenceGapDetail]]:
+    gaps = await detect_evidence_gaps_service(session, system_id)
+    return ApiResponse(data=gaps)

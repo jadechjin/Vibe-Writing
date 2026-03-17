@@ -17,10 +17,13 @@ from app.main import create_app
 from app.persistence import get_db_session
 from app.persistence.base import Base
 from app.persistence.models import (
+    AnalysisRun,
     Asset,
     AssetMetadata,
     Claim,
+    ClaimEvidenceLink,
     ExperimentalSystem,
+    G4Snapshot,
     Outline,
     OutlineAssetBinding,
     Project,
@@ -40,7 +43,10 @@ ALL_TABLES = [
     SystemSection.__table__,
     Asset.__table__,
     AssetMetadata.__table__,
+    AnalysisRun.__table__,
+    ClaimEvidenceLink.__table__,
     Claim.__table__,
+    G4Snapshot.__table__,
     Outline.__table__,
     OutlineAssetBinding.__table__,
     SectionDraft.__table__,
@@ -448,11 +454,12 @@ def test_list_outlines_includes_bindings(client: TestClient, engine) -> None:
                     "bindingNote": "supports intro",
                     "createdAt": body["data"][0]["bindings"][0]["createdAt"],
                     "updatedAt": body["data"][0]["bindings"][0]["updatedAt"],
-                }
-            ],
-            "approvedAt": body["data"][0]["approvedAt"],
-            "createdAt": body["data"][0]["createdAt"],
-            "updatedAt": body["data"][0]["updatedAt"],
+                    }
+                ],
+                "stalenessWarning": None,
+                "approvedAt": body["data"][0]["approvedAt"],
+                "createdAt": body["data"][0]["createdAt"],
+                "updatedAt": body["data"][0]["updatedAt"],
         }
     ]
 
