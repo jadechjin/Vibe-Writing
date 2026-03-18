@@ -123,6 +123,18 @@ export function useDeleteSystem(projectId: string) {
   })
 }
 
+export function useDeleteProject() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (projectId: string) =>
+      apiRequest<void>(`/projects/${projectId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: projectKeys.all })
+    },
+  })
+}
+
 export function useProjectInvalidation(projectId: string) {
   const queryClient = useQueryClient()
 

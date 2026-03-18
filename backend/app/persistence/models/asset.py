@@ -12,9 +12,9 @@ from app.persistence.types import JsonDict, LongText, ShortText
 class Asset(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "assets"
 
-    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     system_id: Mapped[str] = mapped_column(
-        ForeignKey("experimental_systems.id"),
+        ForeignKey("experimental_systems.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -36,7 +36,7 @@ class AssetMetadata(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "asset_metadata"
     __table_args__ = (UniqueConstraint("asset_id", name="uq_asset_metadata_asset_id"),)
 
-    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False)
     semantic_description: Mapped[str | None] = mapped_column(LongText, nullable=True)
     source_description: Mapped[str | None] = mapped_column(LongText, nullable=True)
     instrument_info: Mapped[str | None] = mapped_column(LongText, nullable=True)

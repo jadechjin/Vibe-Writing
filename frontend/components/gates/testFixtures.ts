@@ -168,6 +168,8 @@ export function buildDraft(overrides: Partial<SectionDraftDetail> = {}): Section
     contentMd: "Draft content",
     status: "pending_review",
     generatedFromClaimsJson: ["claim-1"],
+    traceabilityJson: [],
+    traceabilityStale: false,
     reviewComments: [],
     approvedAt: null,
     createdAt: "2026-03-11T00:00:00Z",

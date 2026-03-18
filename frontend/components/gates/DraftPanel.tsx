@@ -23,6 +23,7 @@ import {
   type SystemSectionDetail,
 } from "./workbenchSelectors"
 import { GateTaskStatus } from "./GateTaskStatus"
+import { DraftingWorkspace } from "./g5/DraftingWorkspace"
 
 export type GateContentPanelProps = Readonly<{
   snapshot: WorkflowSnapshot | null
@@ -1029,6 +1030,22 @@ export function DraftPanel({
         ) : null}
       </div>
     )
+  }
+
+  // Section_Drafting: show DraftingWorkspace for AI-assisted drafting
+  if (currentState === "Section_Drafting" || currentState === "Outline_Ready") {
+    const workspaceSections = sections.map((s) => ({
+      sectionKey: s.sectionKey,
+      title: s.title,
+    }))
+    if (workspaceSections.length > 0) {
+      return (
+        <div style={panelStyle}>
+          <GateTaskStatus systemId={systemId} gateKey="G5" />
+          <DraftingWorkspace systemId={systemId} sections={workspaceSections} />
+        </div>
+      )
+    }
   }
 
   return (

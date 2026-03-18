@@ -1,7 +1,14 @@
 """Persistence models package."""
 
 from app.persistence.models.asset import Asset, AssetMetadata
-from app.persistence.models.draft import Outline, OutlineAssetBinding, ReviewComment, SectionDraft
+from app.persistence.models.draft import (
+    DraftChatMessage,
+    DraftChatSession,
+    Outline,
+    OutlineAssetBinding,
+    ReviewComment,
+    SectionDraft,
+)
 from app.persistence.models.g4_snapshot import G4Snapshot
 from app.persistence.models.evidence import (
     AnalysisRun,
@@ -26,6 +33,8 @@ __all__ = [
     "AssetMetadata",
     "Claim",
     "ClaimEvidenceLink",
+    "DraftChatMessage",
+    "DraftChatSession",
     "ExperimentalSystem",
     "FigurePlan",
     "G4Snapshot",

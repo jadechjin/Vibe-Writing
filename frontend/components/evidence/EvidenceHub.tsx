@@ -4,6 +4,7 @@ import { EmptyEvidenceState } from "./EmptyEvidenceState"
 import { G0EvidencePanel } from "./G0EvidencePanel"
 import { G1EvidencePanel } from "./G1EvidencePanel"
 import { G2EvidencePanel } from "./G2EvidencePanel"
+import { G5EvidencePanel } from "./G5EvidencePanel"
 import type { WorkflowSnapshot, Blocker } from "../../hooks/useProjectStatus"
 
 // ---- Props ----
@@ -166,6 +167,8 @@ export function EvidenceHub({ snapshot, latestBlockers, gateKey, systemId }: Evi
         <G1EvidencePanel systemId={systemId} />
       ) : gateKey === "G2" && systemId ? (
         <G2EvidencePanel systemId={systemId} />
+      ) : gateKey === "G5" && systemId ? (
+        <G5EvidencePanel systemId={systemId} />
       ) : (
         <EmptyEvidenceState
           title={content.title}

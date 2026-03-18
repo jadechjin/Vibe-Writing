@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.persistence.models import (
     Asset,
+    AssetMetadata,
     Claim,
+    DraftChatMessage,
+    DraftChatSession,
     ExperimentalSystem,
     Outline,
     OutlineAssetBinding,
@@ -285,18 +288,123 @@ async def list_review_comments_for_drafts(
     return list(result.scalars().all())
 
 
+async def get_active_draft_chat_session(
+    session: SessionLike,
+    system_id: str,
+    section_key: str,
+    provider: str,
+) -> DraftChatSession | None:
+    statement = select(DraftChatSession).where(
+        DraftChatSession.system_id == system_id,
+        DraftChatSession.section_key == section_key,
+        DraftChatSession.provider == provider,
+        DraftChatSession.status == "active",
+    )
+    result = await _maybe_await(session.execute(statement))
+    return result.scalar_one_or_none()
+
+
+async def create_draft_chat_session(
+    session: SessionLike,
+    *,
+    system_id: str,
+    section_key: str,
+    provider: str = "claude",
+) -> DraftChatSession:
+    chat_session = DraftChatSession(
+        system_id=system_id,
+        section_key=section_key,
+        provider=provider,
+    )
+    session.add(chat_session)
+    await _maybe_await(session.flush())
+    return chat_session
+
+
+async def get_draft_chat_next_turn(session: SessionLike, session_id: str) -> int:
+    statement = select(func.coalesce(func.max(DraftChatMessage.turn_index), -1)).where(
+        DraftChatMessage.session_id == session_id,
+    )
+    result = await _maybe_await(session.execute(statement))
+    return result.scalar_one() + 1
+
+
+async def create_draft_chat_message(
+    session: SessionLike,
+    *,
+    session_id: str,
+    role: str,
+    content: str,
+    status: str = "completed",
+    turn_index: int = 0,
+) -> DraftChatMessage:
+    msg = DraftChatMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+        status=status,
+        turn_index=turn_index,
+    )
+    session.add(msg)
+    await _maybe_await(session.flush())
+    return msg
+
+
+async def is_draft_chat_busy(session: SessionLike, session_id: str) -> bool:
+    statement = select(DraftChatMessage.id).where(
+        DraftChatMessage.session_id == session_id,
+        DraftChatMessage.status == "streaming",
+    ).limit(1)
+    result = await _maybe_await(session.execute(statement))
+    return result.scalar_one_or_none() is not None
+
+
+async def list_draft_chat_messages(
+    session: SessionLike,
+    session_id: str,
+) -> list[DraftChatMessage]:
+    statement = (
+        select(DraftChatMessage)
+        .where(DraftChatMessage.session_id == session_id)
+        .order_by(DraftChatMessage.turn_index.asc())
+    )
+    result = await _maybe_await(session.execute(statement))
+    return list(result.scalars().all())
+
+
+async def get_asset_with_metadata(
+    session: SessionLike,
+    asset_id: str,
+) -> tuple[Asset | None, AssetMetadata | None]:
+    asset_stmt = select(Asset).where(Asset.id == asset_id)
+    asset_result = await _maybe_await(session.execute(asset_stmt))
+    asset = asset_result.scalar_one_or_none()
+    if asset is None:
+        return None, None
+    meta_stmt = select(AssetMetadata).where(AssetMetadata.asset_id == asset_id)
+    meta_result = await _maybe_await(session.execute(meta_stmt))
+    return asset, meta_result.scalar_one_or_none()
+
+
 __all__ = [
+    "create_draft_chat_message",
+    "create_draft_chat_session",
     "create_outline",
     "create_outline_binding",
     "create_review_comment",
     "create_section_draft",
+    "get_active_draft_chat_session",
     "get_asset",
+    "get_asset_with_metadata",
+    "get_draft_chat_next_turn",
     "get_next_outline_version",
     "get_next_section_draft_version",
     "get_outline",
     "get_section_draft",
     "get_system_with_project",
+    "is_draft_chat_busy",
     "list_claims_by_ids",
+    "list_draft_chat_messages",
     "list_outline_bindings",
     "list_outline_bindings_for_outlines",
     "list_outlines",

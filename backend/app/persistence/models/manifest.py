@@ -20,9 +20,9 @@ class AssetManifest(UUIDPrimaryKeyMixin, AuditMixin, Base):
         ),
     )
 
-    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     system_id: Mapped[str] = mapped_column(
-        ForeignKey("experimental_systems.id"),
+        ForeignKey("experimental_systems.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

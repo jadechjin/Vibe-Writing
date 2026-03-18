@@ -59,6 +59,8 @@ def review_gate(
         blockers = check_assets_confirmed(session, system)
     elif active_gate == GateKey.G4:
         blockers = check_evidence_and_outline_ready(session, system)
+    elif system.status == SystemState.SECTION_DRAFTING.value:
+        blockers = check_section_drafting_ready(session, system)
     else:
         blockers = check_chapter_approved(session, system)
 
@@ -487,6 +489,65 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
                     )
                 )
 
+    return blockers
+
+
+def check_section_drafting_ready(session: Session, system: ExperimentalSystem) -> list[Blocker]:
+    sections = session.scalars(
+        select(SystemSection)
+        .where(SystemSection.system_id == system.id)
+        .order_by(SystemSection.order_no, SystemSection.section_key)
+    ).all()
+    drafts = session.scalars(select(SectionDraft).where(SectionDraft.system_id == system.id)).all()
+    latest_drafts_by_section = {
+        draft.section_key: draft
+        for draft in _latest_by_version(drafts, key=lambda item: item.section_key)
+    }
+
+    missing_sections: list[str] = []
+    invalid_sections: list[str] = []
+    ready_sections: list[str] = []
+    for section in sections:
+        latest_draft = latest_drafts_by_section.get(section.section_key)
+        if latest_draft is None or latest_draft.status == "draft":
+            missing_sections.append(section.section_key)
+            continue
+        if not latest_draft.traceability_json:
+            invalid_sections.append(section.section_key)
+            continue
+        ready_sections.append(section.section_key)
+
+    blockers: list[Blocker] = []
+    if missing_sections:
+        blockers.append(
+            _build_blocker(
+                code="sections_missing_drafts",
+                message=f"{len(missing_sections)} sections have no validated draft.",
+                gate=GateKey.G5,
+                current_state=system.status,
+                required_checks=[GateRequirementKey.CHAPTER_APPROVED],
+                details={
+                    "total_sections": len(sections),
+                    "ready_sections": ready_sections,
+                    "missing_sections": missing_sections,
+                },
+            )
+        )
+    if invalid_sections:
+        blockers.append(
+            _build_blocker(
+                code="sections_missing_traceability",
+                message=f"{len(invalid_sections)} drafts lack traceability mapping.",
+                gate=GateKey.G5,
+                current_state=system.status,
+                required_checks=[GateRequirementKey.CHAPTER_APPROVED],
+                details={
+                    "total_sections": len(sections),
+                    "ready_sections": ready_sections,
+                    "invalid_sections": invalid_sections,
+                },
+            )
+        )
     return blockers
 
 

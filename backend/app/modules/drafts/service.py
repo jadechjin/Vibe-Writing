@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from inspect import isawaitable
 from typing import Any, TypeVar
@@ -18,6 +20,10 @@ from app.common.events import TaskEvent
 from app.core.exceptions import AppException
 from app.modules.drafts import repository
 from app.modules.drafts.schemas import (
+    DraftChatMessageDetail,
+    DraftContextClaimDetail,
+    DraftContextPack,
+    DraftValidateResponse,
     OutlineBindingCreateRequest,
     OutlineBindingDetail,
     OutlineConfirmRequest,
@@ -905,6 +911,8 @@ def _build_draft_detail(
         version=draft.version,
         content_md=draft.content_md,
         generated_from_claims_json=draft.generated_from_claims_json,
+        traceability_json=draft.traceability_json or [],
+        traceability_stale=bool(draft.traceability_stale),
         status=draft.status,
         review_comments=[_build_comment_detail(comment) for comment in review_comments or []],
         created_by_agent=draft.created_by_agent,
@@ -1258,10 +1266,353 @@ async def _record_generation_failure(
         )
 
 
+# ---------------------------------------------------------------------------
+# Smart Draft Generation (G4.5 → G5)
+# ---------------------------------------------------------------------------
+
+_CLAIM_TAG_RE = re.compile(r"\[Claim:([^\]]+)\]")
+
+_DRAFT_SYSTEM_PROMPT = """你是严谨的工科材料/化学领域学术写手。
+任务：将提供的结构化证据转化为连贯的学术正文。
+禁止：编造数据、引入外部未经证实的文献、改变章节结构。
+必须：在引用结论时标注 [Claim:claim_id] 标签。"""
+
+
+async def assemble_draft_context(
+    session: SessionLike,
+    system_id: str,
+    section_key: str,
+) -> DraftContextPack:
+    system = await repository.get_system_with_project(session, system_id)
+    if system is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="System not found",
+            status_code=404,
+            details={"system_id": system_id},
+        )
+
+    system_summary = f"实验体系: {system.title or system_id}"
+    sections = await repository.list_system_sections(session, system_id)
+    if section_key not in {section.section_key for section in sections}:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message="Section key is not defined for this system",
+            status_code=422,
+            details={"system_id": system_id, "section_key": section_key},
+        )
+
+    # Outline nodes for this section
+    outlines = await repository.list_outlines(session, system_id)
+    confirmed = [o for o in outlines if o.status in ("confirmed", "approved")]
+    latest_outline = max(confirmed, key=lambda o: o.version) if confirmed else None
+    section_nodes: list[dict] = []
+    if latest_outline and isinstance(latest_outline.outline_json, dict):
+        for sec in latest_outline.outline_json.get("sections", []):
+            sk = sec.get("sectionKey", sec.get("section_key", ""))
+            if sk == section_key:
+                section_nodes = sec.get("nodes", [])
+                break
+
+    # Approved claims for this section
+    from app.modules.evidence import repository as evidence_repo
+
+    all_claims = await evidence_repo.list_claims(session, system_id)
+    section_claims = [c for c in all_claims if c.status == "approved" and c.section_ref == section_key]
+
+    # Build claim details with asset descriptions
+    claim_details: list[DraftContextClaimDetail] = []
+    for claim in section_claims:
+        links = await evidence_repo.list_links_for_claim(session, claim.id)
+        asset_descs: list[str] = []
+        for link in links:
+            asset, meta = await repository.get_asset_with_metadata(session, link.asset_id)
+            if asset is None:
+                continue
+            if meta and meta.semantic_description:
+                asset_descs.append(f"Asset {asset.id[:8]}: {meta.semantic_description}")
+            else:
+                asset_descs.append(f"Asset {asset.id[:8]}: {asset.file_name or 'unknown'}")
+        claim_details.append(DraftContextClaimDetail(
+            claim_id=claim.claim_id,
+            statement=claim.statement or "",
+            section_ref=claim.section_ref or "",
+            asset_descriptions=asset_descs,
+        ))
+
+    # Assemble prompt text
+    nodes_text = "\n".join(
+        f"  - {n.get('title', n.get('label', ''))}: {n.get('type', '')}"
+        for n in section_nodes
+    ) or "  (无大纲节点)"
+
+    claims_text = "\n".join(
+        f"Claim {cd.claim_id}: \"{cd.statement}\" "
+        f"(来源: {', '.join(cd.asset_descriptions) or '无关联资产'})"
+        for cd in claim_details
+    ) or "(无已批准 claims)"
+
+    prompt_text = f"""{_DRAFT_SYSTEM_PROMPT}
+
+[章节上下文]
+{system_summary}
+当前撰写：第 {section_key} 节
+大纲结构：
+{nodes_text}
+
+[证据素材]
+{claims_text}
+
+[输出格式]
+Markdown 正文。每个结论句末标注 [Claim:claim_id]。"""
+
+    return DraftContextPack(
+        system_summary=system_summary,
+        section_key=section_key,
+        outline_nodes=section_nodes,
+        claims=claim_details,
+        prompt_text=prompt_text,
+    )
+
+
+def _parse_claim_tags(content_md: str) -> set[str]:
+    return set(_CLAIM_TAG_RE.findall(content_md))
+
+
+def _build_traceability(content_md: str) -> list[dict]:
+    entries: list[dict] = []
+    for match in _CLAIM_TAG_RE.finditer(content_md):
+        start = content_md.rfind(".", 0, match.start()) + 1
+        entries.append({
+            "claim_tag": match.group(1),
+            "text_excerpt": content_md[start:match.end()].strip(),
+            "char_start": match.start(),
+            "char_end": match.end(),
+        })
+    return entries
+
+
+async def validate_and_save_draft(
+    session: SessionLike,
+    system_id: str,
+    section_key: str,
+    content_md: str,
+    outline_id: str | None = None,
+) -> DraftValidateResponse:
+    system = await repository.get_system_with_project(session, system_id)
+    if system is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="System not found",
+            status_code=404,
+            details={"system_id": system_id},
+        )
+
+    sections = await repository.list_system_sections(session, system_id)
+    if section_key not in {section.section_key for section in sections}:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message="Section key is not defined for this system",
+            status_code=422,
+            details={"system_id": system_id, "section_key": section_key},
+        )
+
+    # Get required claims for this section
+    from app.modules.evidence import repository as evidence_repo
+
+    all_claims = await evidence_repo.list_claims(session, system_id)
+    required_ids = {c.claim_id for c in all_claims if c.status == "approved" and c.section_ref == section_key}
+
+    # Parse tags from content
+    found_tags = _parse_claim_tags(content_md)
+
+    # Validation
+    errors: list[dict] = []
+    missing = required_ids - found_tags
+    if missing:
+        errors.append({"code": "coverage_incomplete", "missing_claims": sorted(missing)})
+    invented = found_tags - required_ids
+    if invented:
+        errors.append({"code": "hallucinated_claims", "invented_claims": sorted(invented)})
+
+    # Build traceability
+    traceability = _build_traceability(content_md)
+
+    # Save draft regardless (with validation status)
+    version = await repository.get_next_section_draft_version(session, system_id, section_key)
+    draft = await repository.create_section_draft(
+        session,
+        system_id=system_id,
+        section_key=section_key,
+        content_md=content_md,
+        outline_id=outline_id,
+        generated_from_claims_json=sorted(found_tags),
+        status="draft" if errors else "needs_review",
+        created_by_agent="claude",
+        version=version,
+    )
+    draft.traceability_json = traceability
+    draft.traceability_stale = False
+    await _maybe_await(session.commit())
+
+    # Build detail
+    comments = await repository.list_review_comments(session, draft.id)
+    detail = _build_draft_detail(draft, comments)
+
+    return DraftValidateResponse(
+        draft=detail,
+        validation_passed=len(errors) == 0,
+        errors=errors,
+    )
+
+
+async def send_draft_chat_message_stream(
+    session: SessionLike,
+    system_id: str,
+    section_key: str,
+    provider_name: str,
+    content: str,
+) -> AsyncGenerator[str, None]:
+    system = await repository.get_system_with_project(session, system_id)
+    if system is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="System not found",
+            status_code=404,
+            details={"system_id": system_id},
+        )
+
+    from app.modules.evidence.chat_provider import ChatProvider as ChatCliProvider, invoke_chat_stream
+
+    provider_value = str(provider_name)
+    try:
+        provider = ChatCliProvider(provider_value)
+    except ValueError as exc:
+        raise AppException(
+            code=ErrorCode.VALIDATION_ERROR.value,
+            message=f"Unsupported provider: {provider_value}",
+            status_code=422,
+            details={"provider": provider_value},
+        ) from exc
+
+    chat_session = await repository.get_active_draft_chat_session(
+        session, system_id, section_key, provider_value,
+    )
+    if chat_session is None:
+        chat_session = await repository.create_draft_chat_session(
+            session, system_id=system_id, section_key=section_key, provider=provider_value,
+        )
+        await _maybe_await(session.commit())
+
+    if await repository.is_draft_chat_busy(session, chat_session.id):
+        raise AppException(
+            code=ErrorCode.CONFLICT.value,
+            message="Chat session is busy",
+            status_code=409,
+            details={"system_id": system_id, "section_key": section_key},
+        )
+
+    from sqlalchemy.exc import IntegrityError as _IntegrityError
+
+    try:
+        turn_index = await repository.get_draft_chat_next_turn(session, chat_session.id)
+        await repository.create_draft_chat_message(
+            session, session_id=chat_session.id, role="user",
+            content=content, status="completed", turn_index=turn_index,
+        )
+        assistant_msg = await repository.create_draft_chat_message(
+            session, session_id=chat_session.id, role="assistant",
+            content="", status="streaming", turn_index=turn_index + 1,
+        )
+        from datetime import UTC
+        chat_session.last_message_at = datetime.now(UTC)
+        await _maybe_await(session.commit())
+    except _IntegrityError:
+        await _maybe_await(session.rollback())
+        raise AppException(
+            code=ErrorCode.CONFLICT.value,
+            message="Chat session conflict",
+            status_code=409,
+        )
+
+    # Build context for first message
+    context = ""
+    if turn_index == 0:
+        ctx = await assemble_draft_context(session, system_id, section_key)
+        context = ctx.prompt_text
+
+    async def _stream() -> AsyncGenerator[str, None]:
+        collected: list[str] = []
+        extracted_sid: str | None = None
+
+        try:
+            async for chunk in invoke_chat_stream(
+                provider, content,
+                session_id=chat_session.provider_session_id,
+                context=context,
+            ):
+                if chunk.strip().startswith("__SESSION_ID__:"):
+                    extracted_sid = chunk.strip().split(":", 1)[1].strip()
+                    if extracted_sid != chat_session.provider_session_id:
+                        chat_session.provider_session_id = extracted_sid
+                    await _maybe_await(session.commit())
+                    continue
+                collected.append(chunk)
+                yield f"data: {json.dumps({'type': 'delta', 'content': chunk})}\n\n"
+
+            assistant_msg.content = "".join(collected)
+            assistant_msg.status = "completed"
+            if extracted_sid and extracted_sid != chat_session.provider_session_id:
+                chat_session.provider_session_id = extracted_sid
+            from datetime import UTC
+            chat_session.last_message_at = datetime.now(UTC)
+            await _maybe_await(session.commit())
+            yield f"data: {json.dumps({'type': 'done', 'content': ''})}\n\n"
+        except Exception as exc:
+            assistant_msg.content = "".join(collected)
+            assistant_msg.status = "failed"
+            assistant_msg.error_text = str(exc)
+            await _maybe_await(session.commit())
+            yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
+
+    return _stream()
+
+
+async def list_draft_chat_messages(
+    session: SessionLike,
+    system_id: str,
+    section_key: str,
+    provider: str = "claude",
+) -> list[DraftChatMessageDetail]:
+    chat_session = await repository.get_active_draft_chat_session(
+        session, system_id, section_key, provider,
+    )
+    if chat_session is None:
+        return []
+
+    messages = await repository.list_draft_chat_messages(session, chat_session.id)
+    return [
+        DraftChatMessageDetail(
+            id=m.id,
+            session_id=m.session_id,
+            role=m.role,
+            content=m.content,
+            status=m.status,
+            turn_index=m.turn_index,
+            error_text=m.error_text,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
+        )
+        for m in messages
+        if m.status != "streaming"
+    ]
+
+
 __all__ = [
     "DRAFT_TASK_START_DELAY_SECONDS",
     "add_review_comment",
     "approve_section_draft",
+    "assemble_draft_context",
     "bind_outline_assets",
     "complete_outline_generation",
     "complete_section_draft_generation",
@@ -1269,8 +1620,11 @@ __all__ = [
     "generate_outline",
     "generate_section_draft",
     "get_draft_task_session_bind",
+    "list_draft_chat_messages",
     "list_outlines",
     "list_section_drafts",
     "run_outline_generation_task",
     "run_section_draft_generation_task",
+    "send_draft_chat_message_stream",
+    "validate_and_save_draft",
 ]

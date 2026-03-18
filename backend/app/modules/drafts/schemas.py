@@ -68,6 +68,8 @@ class SectionDraftDetail(CamelModel):
     version: int
     content_md: str
     generated_from_claims_json: list[str] = Field(default_factory=list)
+    traceability_json: list[dict[str, Any]] = Field(default_factory=list)
+    traceability_stale: bool = False
     status: str
     review_comments: list[ReviewCommentDetail] = Field(default_factory=list)
     created_by_agent: str | None = None
@@ -110,7 +112,64 @@ class ReviewCommentCreateRequest(CamelModel):
     context_json: dict[str, Any] = Field(default_factory=dict)
 
 
+class TraceabilityEntry(CamelModel):
+    claim_tag: str
+    text_excerpt: str
+    char_start: int
+    char_end: int
+
+
+class DraftContextClaimDetail(CamelModel):
+    claim_id: str
+    statement: str
+    section_ref: str
+    asset_descriptions: list[str] = Field(default_factory=list)
+
+
+class DraftContextPack(CamelModel):
+    system_summary: str
+    section_key: str
+    outline_nodes: list[dict[str, Any]] = Field(default_factory=list)
+    claims: list[DraftContextClaimDetail] = Field(default_factory=list)
+    prompt_text: str
+
+
+class DraftValidateRequest(CamelModel):
+    content_md: str
+    outline_id: str | None = None
+
+
+class DraftValidateResponse(CamelModel):
+    draft: SectionDraftDetail
+    validation_passed: bool
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class DraftChatMessageRequest(CamelModel):
+    provider: str = "claude"
+    content: str
+    scope: str = "drafting"
+
+
+class DraftChatMessageDetail(CamelModel):
+    id: str
+    session_id: str
+    role: str
+    content: str
+    status: str
+    turn_index: int
+    error_text: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 __all__ = [
+    "DraftChatMessageDetail",
+    "DraftChatMessageRequest",
+    "DraftContextClaimDetail",
+    "DraftContextPack",
+    "DraftValidateRequest",
+    "DraftValidateResponse",
     "OutlineBindingCreateRequest",
     "OutlineBindingDetail",
     "OutlineConfirmRequest",
@@ -123,4 +182,5 @@ __all__ = [
     "SectionDraftDetail",
     "SectionDraftGenerateAcceptedResponse",
     "SectionDraftGenerateRequest",
+    "TraceabilityEntry",
 ]

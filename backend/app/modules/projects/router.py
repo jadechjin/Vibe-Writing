@@ -7,6 +7,7 @@ from app.common.schemas import ApiResponse, PaginationMeta
 from app.modules.projects.schemas import ProjectCreateRequest, ProjectDetail, ProjectListItem
 from app.modules.projects.service import (
     create_project as create_project_service,
+    delete_project as delete_project_service,
     get_project_detail as get_project_detail_service,
     list_projects as list_projects_service,
 )
@@ -42,3 +43,11 @@ async def get_project_detail(
 ) -> ApiResponse[ProjectDetail]:
     project = await get_project_detail_service(session, project_id)
     return ApiResponse(data=project)
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(
+    project_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    await delete_project_service(session, project_id)

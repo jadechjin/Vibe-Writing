@@ -1,9 +1,8 @@
 "use client"
 
 import { type CSSProperties, useState } from "react"
-import Link from "next/link"
 
-import { useProjectList, useCreateProject, type CreateProjectInput } from "../../hooks/useProjects"
+import { useProjectList, useCreateProject, useDeleteProject, type CreateProjectInput } from "../../hooks/useProjects"
 
 const containerStyle: CSSProperties = {
   minHeight: "100vh",
@@ -159,9 +158,11 @@ const submitBtnStyle: CSSProperties = {
 export default function ProjectsPage() {
   const { data: projects, isLoading, error } = useProjectList()
   const createProject = useCreateProject()
+  const deleteProject = useDeleteProject()
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState("")
   const [ownerId, setOwnerId] = useState("")
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
   function handleCreate() {
     if (!name.trim() || !ownerId.trim()) {
@@ -208,10 +209,17 @@ export default function ProjectsPage() {
       ) : (
         <div style={listStyle}>
           {projects.map((project) => (
-            <Link
+            <div
               key={project.id}
-              href={`/projects/${project.id}`}
-              style={cardStyle}
+              style={{
+                ...cardStyle,
+                cursor: confirmingId === project.id ? "default" : "pointer",
+              }}
+              onClick={() => {
+                if (confirmingId !== project.id) {
+                  window.location.href = `/projects/${project.id}`
+                }
+              }}
             >
               <div>
                 <div style={cardNameStyle}>{project.name}</div>
@@ -219,8 +227,59 @@ export default function ProjectsPage() {
                   {project.systemCount} 个实验体系 | 负责人：{project.ownerId}
                 </div>
               </div>
-              <span style={badgeStyle}>{project.status}</span>
-            </Link>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+                {confirmingId === project.id ? (
+                  <>
+                    <span style={{ fontSize: "12px", color: "#f87171", whiteSpace: "nowrap" }}>确定删除？</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteProject.mutate(project.id, {
+                          onSuccess: () => setConfirmingId(null),
+                        })
+                      }}
+                      disabled={deleteProject.isPending}
+                      style={{
+                        padding: "4px 10px", borderRadius: "6px", fontSize: "12px",
+                        border: "1px solid rgba(239,68,68,0.5)", background: "rgba(239,68,68,0.2)",
+                        color: "#f87171", cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      {deleteProject.isPending ? "删除中..." : "确定"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setConfirmingId(null) }}
+                      style={{
+                        padding: "4px 10px", borderRadius: "6px", fontSize: "12px",
+                        border: "1px solid rgba(148,163,184,0.2)", background: "transparent",
+                        color: "#94a3b8", cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      取消
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span style={badgeStyle}>{project.status}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setConfirmingId(project.id) }}
+                      style={{
+                        width: "28px", height: "28px", borderRadius: "8px",
+                        border: "1px solid rgba(148,163,184,0.15)", background: "rgba(15,23,42,0.8)",
+                        color: "#64748b", fontSize: "14px", cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                      title="删除项目"
+                    >
+                      ×
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}

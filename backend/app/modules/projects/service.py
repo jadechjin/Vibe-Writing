@@ -62,6 +62,20 @@ async def get_project_detail(session: SessionLike, project_id: str) -> ProjectDe
     return _build_project_detail(project)
 
 
+async def delete_project(session: SessionLike, project_id: str) -> None:
+    project = await repository.get_project_detail(session, project_id)
+    if project is None:
+        raise AppException(
+            code=ErrorCode.NOT_FOUND.value,
+            message="Project not found",
+            status_code=404,
+            details={"project_id": project_id},
+        )
+
+    await repository.delete_project_by_id(session, project_id)
+    await _maybe_await(session.commit())
+
+
 def _build_project_list_item(project: Project) -> ProjectListItem:
     return ProjectListItem(
         id=project.id,

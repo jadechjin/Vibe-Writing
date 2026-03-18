@@ -32,6 +32,8 @@ export type SectionDraftDetail = {
   contentMd: string
   status: string
   generatedFromClaimsJson: string[]
+  traceabilityJson: Array<Record<string, unknown>>
+  traceabilityStale: boolean
   reviewComments: ReviewCommentDetail[]
   approvedAt: string | null
   createdAt: string

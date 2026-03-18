@@ -133,15 +133,6 @@ async def delete_system(
             details={"system_id": system_id},
         )
 
-    has_data = await repository.has_associated_data(session, system_id)
-    if has_data:
-        raise AppException(
-            code=ErrorCode.CONFLICT.value,
-            message="System has associated data and cannot be deleted",
-            status_code=409,
-            details={"system_id": system_id},
-        )
-
     await repository.delete_system_by_id(session, system_id)
     await _maybe_await(session.commit())
 

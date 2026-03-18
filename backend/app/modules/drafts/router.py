@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.websocket import get_broadcaster
 from app.common.schemas import ApiResponse
 from app.modules.drafts.schemas import (
+    DraftChatMessageDetail,
+    DraftChatMessageRequest,
+    DraftContextPack,
+    DraftValidateRequest,
+    DraftValidateResponse,
     OutlineBindingCreateRequest,
     OutlineBindingDetail,
     OutlineConfirmRequest,
@@ -25,15 +31,19 @@ from app.modules.drafts.service import (
     DRAFT_TASK_START_DELAY_SECONDS,
     add_review_comment as add_review_comment_service,
     approve_section_draft as approve_draft_service,
+    assemble_draft_context as assemble_draft_context_service,
     bind_outline_assets as bind_outline_assets_service,
     confirm_outline as confirm_outline_service,
     generate_outline as generate_outline_service,
     generate_section_draft as generate_draft_service,
     get_draft_task_session_bind,
+    list_draft_chat_messages as list_draft_chat_messages_service,
     list_outlines as list_outlines_service,
     list_section_drafts as list_drafts_service,
     run_outline_generation_task,
     run_section_draft_generation_task,
+    send_draft_chat_message_stream as send_draft_chat_message_stream_service,
+    validate_and_save_draft as validate_and_save_draft_service,
 )
 from app.persistence import get_db_session
 
@@ -140,6 +150,79 @@ async def generate_section_draft(
             broadcaster=broadcaster,
             delay_seconds=DRAFT_TASK_START_DELAY_SECONDS,
         )
+    )
+    return ApiResponse(data=result)
+
+
+@router.get(
+    "/systems/{system_id}/sections/{section_key}/draft/context",
+    response_model=ApiResponse[DraftContextPack],
+)
+async def get_draft_context(
+    system_id: str,
+    section_key: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[DraftContextPack]:
+    result = await assemble_draft_context_service(session, system_id, section_key)
+    return ApiResponse(data=result)
+
+
+@router.post("/systems/{system_id}/sections/{section_key}/draft/chat")
+async def send_draft_chat_message(
+    system_id: str,
+    section_key: str,
+    payload: DraftChatMessageRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    stream = await send_draft_chat_message_stream_service(
+        session,
+        system_id,
+        section_key,
+        payload.provider,
+        payload.content,
+    )
+    return StreamingResponse(
+        stream,
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get(
+    "/systems/{system_id}/sections/{section_key}/draft/chat/messages",
+    response_model=ApiResponse[list[DraftChatMessageDetail]],
+)
+async def list_draft_chat_messages(
+    system_id: str,
+    section_key: str,
+    provider: str = Query(default="claude", min_length=1, max_length=50),
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[list[DraftChatMessageDetail]]:
+    messages = await list_draft_chat_messages_service(
+        session,
+        system_id,
+        section_key,
+        provider,
+    )
+    return ApiResponse(data=messages)
+
+
+@router.post(
+    "/systems/{system_id}/sections/{section_key}/draft/validate-and-save",
+    response_model=ApiResponse[DraftValidateResponse],
+)
+async def validate_and_save_draft(
+    system_id: str,
+    section_key: str,
+    payload: DraftValidateRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[DraftValidateResponse]:
+    result = await validate_and_save_draft_service(
+        session,
+        system_id,
+        section_key,
+        payload.content_md,
+        payload.outline_id,
     )
     return ApiResponse(data=result)
 

@@ -58,3 +58,12 @@ async def get_project_detail(session: SessionLike, project_id: str) -> Project |
     )
     result = await _maybe_await(session.execute(statement))
     return result.scalars().unique().one_or_none()
+
+
+async def delete_project_by_id(session: SessionLike, project_id: str) -> None:
+    stmt = select(Project).where(Project.id == project_id)
+    result = await _maybe_await(session.execute(stmt))
+    project = result.scalar_one_or_none()
+    if project is not None:
+        await _maybe_await(session.delete(project))
+        await _maybe_await(session.flush())
