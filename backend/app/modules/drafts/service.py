@@ -1274,8 +1274,29 @@ _CLAIM_TAG_RE = re.compile(r"\[Claim:([^\]]+)\]")
 
 _DRAFT_SYSTEM_PROMPT = """你是严谨的工科材料/化学领域学术写手。
 任务：将提供的结构化证据转化为连贯的学术正文。
-禁止：编造数据、引入外部未经证实的文献、改变章节结构。
-必须：在引用结论时标注 [Claim:claim_id] 标签。"""
+禁止：编造数据、改变章节结构。
+必须：在引用结论时标注 [Claim:claim_id] 标签。
+
+[项目约束 — 资产流入协议]
+本系统是证据驱动的论文工作流平台。当你认为需要引入外部文献或新证据来源时，
+请用以下标记包裹，解析器会自动将其流入项目资产体系：
+
+<!-- ASSET_INGEST: type=literature_reference -->
+{"title":"文献标题","authors":"作者","year":2024,"doi":"10.xxx/xxx","relevance":"为什么这篇文献对当前章节有价值"}
+<!-- /ASSET_INGEST -->
+
+当你对已生成的草稿有审阅意见时，可用：
+<!-- REVIEW_SCORE -->
+{"dimensions":{"originality":75,"methodology":82,"evidence_sufficiency":70,"argument_coherence":85,"writing_quality":80},"verdict":"minor_revision","key_issues":["issue1"]}
+<!-- /REVIEW_SCORE -->
+
+当你发现需要修订的具体问题时，可用：
+<!-- REVISION_ITEM -->
+{"severity":"major","section":"3.2","issue":"问题描述","suggestion":"修改建议"}
+<!-- /REVISION_ITEM -->
+
+这些标记是可选的——仅在你判断确实需要引入外部资源或记录审阅意见时使用。
+标记之外的正文内容照常作为草稿文本处理。"""
 
 
 async def assemble_draft_context(
@@ -1341,6 +1362,71 @@ async def assemble_draft_context(
         ))
 
     # Assemble prompt text
+    # --- G0: Skeleton research context ---
+    skeleton_context = ""
+    try:
+        from app.modules.skeletons import repository as skeleton_repo
+        skeletons = await skeleton_repo.list_skeletons(session, system_id)
+        confirmed = [s for s in skeletons if s.status == "confirmed"]
+        if confirmed:
+            latest_sk = max(confirmed, key=lambda s: s.version)
+            sk_json = latest_sk.skeleton_json or {}
+            rq_items = sk_json.get("research_questions", [])
+            arg_items = sk_json.get("argument_chains", [])
+            fig_items = sk_json.get("figure_framework", [])
+            analysis_items = sk_json.get("analysis_strategy", [])
+            parts = []
+            if rq_items:
+                parts.append("研究问题:\n" + "\n".join(
+                    f"  - {q.get('question', q) if isinstance(q, dict) else q}" for q in rq_items[:5]
+                ))
+            if arg_items:
+                parts.append("论证链:\n" + "\n".join(
+                    f"  - {a.get('claim', a) if isinstance(a, dict) else a}" for a in arg_items[:5]
+                ))
+            if analysis_items:
+                parts.append("分析策略:\n" + "\n".join(
+                    f"  - {a.get('method', a) if isinstance(a, dict) else a}" for a in analysis_items[:3]
+                ))
+            if fig_items:
+                parts.append("图表框架:\n" + "\n".join(
+                    f"  - Fig{f.get('figure_no', '?')}: {f.get('title', '?')} (importance={f.get('importance', 'N/A')})"
+                    for f in fig_items[:5]
+                ))
+            if parts:
+                skeleton_context = "\n".join(parts)
+    except Exception:
+        pass  # Skeleton module may not be available
+
+    # --- G1: Figure Plans context ---
+    figure_plan_context = ""
+    try:
+        from app.modules.evidence import repository as evidence_repo_fp
+        all_plans = await evidence_repo_fp.list_figure_plans(session, system_id)
+        section_plans = [p for p in all_plans if p.section_key == section_key]
+        if section_plans:
+            fp_lines = []
+            for p in section_plans[:8]:
+                status_tag = f"[{p.status}]" if hasattr(p, "status") else ""
+                dq = f" | 数据问题: {p.data_question}" if getattr(p, "data_question", None) else ""
+                et = f" | 分析结论: {p.evidence_text}" if getattr(p, "evidence_text", None) else ""
+                fp_lines.append(f"  - Fig{p.figure_no}: {p.title} {status_tag}{dq}{et}")
+            figure_plan_context = "图表计划:\n" + "\n".join(fp_lines)
+    except Exception:
+        pass
+
+    # --- G4: Evidence gaps context ---
+    evidence_gap_context = ""
+    try:
+        from app.modules.evidence.service import detect_evidence_gaps as _detect_gaps
+        gaps = await _detect_gaps(session, system_id)
+        section_gaps = [g for g in gaps if getattr(g, "section_key", None) == section_key]
+        if section_gaps:
+            gap_lines = [f"  - [{g.gap_type}] {g.description}" for g in section_gaps[:5]]
+            evidence_gap_context = "证据缺口:\n" + "\n".join(gap_lines)
+    except Exception:
+        pass
+
     nodes_text = "\n".join(
         f"  - {n.get('title', n.get('label', ''))}: {n.get('type', '')}"
         for n in section_nodes
@@ -1362,9 +1448,17 @@ async def assemble_draft_context(
 
 [证据素材]
 {claims_text}
+"""
 
-[输出格式]
-Markdown 正文。每个结论句末标注 [Claim:claim_id]。"""
+    # Append enriched G0-G4 context blocks if available
+    if skeleton_context:
+        prompt_text += f"\n[G0 研究框架]\n{skeleton_context}\n"
+    if figure_plan_context:
+        prompt_text += f"\n[G1 图表计划]\n{figure_plan_context}\n"
+    if evidence_gap_context:
+        prompt_text += f"\n[G4 证据缺口]\n{evidence_gap_context}\n"
+
+    prompt_text += "\n[输出格式]\nMarkdown 正文。每个结论句末标注 [Claim:claim_id]。"
 
     return DraftContextPack(
         system_summary=system_summary,
@@ -1566,6 +1660,22 @@ async def send_draft_chat_message_stream(
                 chat_session.provider_session_id = extracted_sid
             from datetime import UTC
             chat_session.last_message_at = datetime.now(UTC)
+
+            # --- Skill output parsing: extract structured blocks ---
+            from app.modules.drafts.skill_output_parser import parse_skill_output
+
+            parse_result = parse_skill_output(assistant_msg.content)
+            if parse_result.has_structured_blocks:
+                # Store clean text (blocks removed) as the message content
+                assistant_msg.content = parse_result.clean_text
+                # Notify frontend about extracted assets/reviews
+                if parse_result.assets:
+                    yield f"data: {json.dumps({'type': 'skill_assets', 'content': json.dumps([{'asset_type': a.asset_type, 'payload': a.payload} for a in parse_result.assets])})}\n\n"
+                if parse_result.review_scores:
+                    yield f"data: {json.dumps({'type': 'skill_review', 'content': json.dumps([r.payload for r in parse_result.review_scores])})}\n\n"
+                if parse_result.revision_items:
+                    yield f"data: {json.dumps({'type': 'skill_revisions', 'content': json.dumps([r.payload for r in parse_result.revision_items])})}\n\n"
+
             await _maybe_await(session.commit())
             yield f"data: {json.dumps({'type': 'done', 'content': ''})}\n\n"
         except Exception as exc:

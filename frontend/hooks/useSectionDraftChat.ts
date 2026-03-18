@@ -47,12 +47,18 @@ export function useSendDraftChatStream(
   const queryClient = useQueryClient()
   const [streaming, setStreaming] = useState(false)
   const [streamContent, setStreamContent] = useState("")
+  const [skillAssets, setSkillAssets] = useState<unknown[]>([])
+  const [skillReview, setSkillReview] = useState<unknown[]>([])
+  const [skillRevisions, setSkillRevisions] = useState<unknown[]>([])
   const abortRef = useRef<AbortController | null>(null)
 
   const send = useCallback(
     async (content: string, provider = "claude") => {
       setStreaming(true)
       setStreamContent("")
+      setSkillAssets([])
+      setSkillReview([])
+      setSkillRevisions([])
       const controller = new AbortController()
       abortRef.current = controller
 
@@ -88,6 +94,12 @@ export function useSendDraftChatStream(
               if (evt.type === "delta") {
                 accumulated += evt.content
                 setStreamContent(accumulated)
+              } else if (evt.type === "skill_assets") {
+                try { setSkillAssets(JSON.parse(evt.content)) } catch { /* skip */ }
+              } else if (evt.type === "skill_review") {
+                try { setSkillReview(JSON.parse(evt.content)) } catch { /* skip */ }
+              } else if (evt.type === "skill_revisions") {
+                try { setSkillRevisions(JSON.parse(evt.content)) } catch { /* skip */ }
               }
             } catch {
               // ignore parse errors
@@ -109,5 +121,5 @@ export function useSendDraftChatStream(
     abortRef.current?.abort()
   }, [])
 
-  return { send, abort, streaming, streamContent }
+  return { send, abort, streaming, streamContent, skillAssets, skillReview, skillRevisions }
 }
