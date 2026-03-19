@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.enums import EventType, TaskStatus
+from app.common.enums import EventType, TaskStatus, coerce_gate_key
 from app.common.schemas import Blocker, JobHandle
 from app.modules.tasks.repository import TaskWorkflowRepository
 from app.modules.tasks.schemas import (
@@ -201,6 +201,7 @@ class TaskWorkflowService:
         event_records = [self._serialize_event(event) for event in events]
         resolved_latest_event = latest_event or (events[-1] if events else None)
         latest_blockers = instance.context_json.get("latest_blockers", [])
+        coerced_gate = coerce_gate_key(instance.current_gate) if instance.current_gate else None
         return WorkflowSnapshot(
             workflow_id=instance.id,
             job_id=self._build_job_id(instance),
@@ -208,7 +209,7 @@ class TaskWorkflowService:
             system_id=instance.system_id,
             workflow_key=instance.workflow_key,
             current_state=instance.current_state,
-            current_gate=instance.current_gate,
+            current_gate=coerced_gate.value if coerced_gate else instance.current_gate,
             status=TaskStatus(instance.status),
             context=dict(instance.context_json),
             version=instance.version,

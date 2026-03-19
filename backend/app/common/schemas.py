@@ -1,8 +1,8 @@
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from app.common.enums import GateKey, GateRequirementKey, SystemState, TaskStatus
+from app.common.enums import GateKey, GateRequirementKey, SystemState, TaskStatus, coerce_gate_key
 
 T = TypeVar("T")
 
@@ -27,6 +27,17 @@ class Blocker(BaseModel):
     current_state: SystemState | None = None
     required_checks: list[GateRequirementKey] = Field(default_factory=list)
     details: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("gate", mode="before")
+    @classmethod
+    def _coerce_gate(cls, v: Any) -> GateKey | None:
+        if v is None:
+            return None
+        if isinstance(v, GateKey):
+            return v
+        if isinstance(v, str):
+            return coerce_gate_key(v)
+        return None
 
 
 class GateReview(BaseModel):

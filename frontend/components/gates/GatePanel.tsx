@@ -2,10 +2,8 @@ import type { CSSProperties, ReactNode } from "react"
 
 import { WorkflowPanel } from "../drafting/WorkflowPanel"
 import { G0Workbench } from "./G0Workbench"
-import { FigurePlanPanel } from "./FigurePlanPanel"
-import { AnalysisPanel } from "./AnalysisPanel"
-import { ManifestPanel } from "./ManifestPanel"
-import { EvidenceMatrixPanel } from "./EvidenceMatrixPanel"
+import { G1Panel } from "./G1Panel"
+import { G2Panel } from "./G2Panel"
 import { DraftPanel } from "./DraftPanel"
 import type { GateKey } from "../../lib/gateMapping"
 import type {
@@ -69,25 +67,11 @@ function resolveWorkbenchContent(
         actionHint: "结构骨架确认后，系统将评审 G0 并尝试推进。",
       }
     case "G1":
-      return {
-        title: "图表规划",
-        description: "基于骨架结构规划全部图表。按章节浏览图表任务，编辑简述并确认后推进至数据上传阶段。",
-        actionLabel: "推进门禁",
-        actionHint: "全部图表规划确认后可推进至数据上传阶段。",
-      }
+      return resolveG1Workbench(currentState)
     case "G2":
       return resolveG2Workbench(currentState)
     case "G3":
-      return {
-        title: "资产确认",
-        description: "审核 Manifest 中的全部资产状态，确认图表、数据文件与分析结果均已就位。",
-        actionLabel: "确认 Manifest",
-        actionHint: "全部资产确认后将触发证据矩阵生成。",
-      }
-    case "G4":
-      return resolveG4Workbench(currentState)
-    case "G5":
-      return resolveG5Workbench(currentState)
+      return resolveG3Workbench(currentState)
     default:
       return {
         title: "未知门禁",
@@ -96,19 +80,14 @@ function resolveWorkbenchContent(
   }
 }
 
-function resolveG2Workbench(currentState: string | null): WorkbenchContent {
+function resolveG1Workbench(currentState: string | null): WorkbenchContent {
   switch (currentState) {
     case "Data_Pending":
-      return {
-        title: "等待上传",
-        description: "请上传实验原始数据与图像文件。系统将根据图表规划进行自动关联与分析。",
-        actionLabel: "上传数据文件",
-      }
     case "Data_Uploaded":
       return {
-        title: "分析进行中",
-        description: "数据已上传，正在等待系统完成自动分析。分析任务可在底部状态栏中跟踪。",
-        actionHint: "分析完成后可推进至 G3。",
+        title: "数据与分析",
+        description: "请上传实验原始数据与图像文件。系统将根据图表规划进行自动关联与分析。",
+        actionLabel: "上传数据文件",
       }
     case "Analysis_Ready":
       return {
@@ -118,14 +97,17 @@ function resolveG2Workbench(currentState: string | null): WorkbenchContent {
       }
     default:
       return {
-        title: "数据与分析",
-        description: "当前处于数据与分析阶段，请上传数据或等待分析完成。",
+        title: "图表规划",
+        description: "基于骨架结构规划全部图表。按章节浏览图表任务，编辑简述并确认后推进至数据上传阶段。",
+        actionLabel: "推进门禁",
+        actionHint: "全部图表规划确认后可推进至数据上传阶段。",
       }
   }
 }
 
-function resolveG4Workbench(currentState: string | null): WorkbenchContent {
+function resolveG2Workbench(currentState: string | null): WorkbenchContent {
   switch (currentState) {
+    case "Assets_Confirmed":
     case "Evidence_Matrix_Ready":
       return {
         title: "证据矩阵就绪",
@@ -140,14 +122,15 @@ function resolveG4Workbench(currentState: string | null): WorkbenchContent {
       }
     default:
       return {
-        title: "证据与提纲",
-        description: "等待证据矩阵与提纲生成并确认。",
-        actionHint: "此阶段完成后进入章节撰写。",
+        title: "资产确认",
+        description: "审核 Manifest 中的全部资产状态，确认图表、数据文件与分析结果均已就位。",
+        actionLabel: "确认 Manifest",
+        actionHint: "全部资产确认后将触发证据矩阵生成。",
       }
   }
 }
 
-function resolveG5Workbench(currentState: string | null): WorkbenchContent {
+function resolveG3Workbench(currentState: string | null): WorkbenchContent {
   switch (currentState) {
     case "Section_Drafting":
       return {
@@ -308,11 +291,9 @@ export function GatePanel({
     const panelProps = { snapshot, blockers: latestBlockers, systemId: systemIdStr, systemDetail: systemDetail ?? null }
 
     switch (effectiveGateKey) {
-      case "G1": return <FigurePlanPanel {...panelProps} />
-      case "G2": return <AnalysisPanel {...panelProps} />
-      case "G3": return <ManifestPanel {...panelProps} />
-      case "G4": return <EvidenceMatrixPanel {...panelProps} />
-      case "G5": return <DraftPanel {...panelProps} />
+      case "G1": return <G1Panel {...panelProps} />
+      case "G2": return <G2Panel {...panelProps} />
+      case "G3": return <DraftPanel {...panelProps} />
       default: return null
     }
   }

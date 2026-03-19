@@ -109,7 +109,7 @@ const subtitleStyle: CSSProperties = {
 
 const gateListStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(6, minmax(132px, 1fr))",
+  gridTemplateColumns: "repeat(4, minmax(132px, 1fr))",
   gap: "12px",
   listStyle: "none",
   margin: 0,
@@ -182,35 +182,21 @@ export const DEFAULT_GATE_PLACEHOLDERS: readonly GateNavItem[] = [
   {
     key: "G1",
     label: "G1",
-    title: "图表规划",
+    title: "图表与分析",
     summary: "等待 gate 状态数据接入。",
     state: "neutral",
   },
   {
     key: "G2",
     label: "G2",
-    title: "数据与分析",
+    title: "证据与提纲",
     summary: "等待 gate 状态数据接入。",
     state: "neutral",
   },
   {
     key: "G3",
     label: "G3",
-    title: "资产确认",
-    summary: "等待 gate 状态数据接入。",
-    state: "neutral",
-  },
-  {
-    key: "G4",
-    label: "G4",
-    title: "证据与提纲",
-    summary: "等待 gate 状态数据接入。",
-    state: "neutral",
-  },
-  {
-    key: "G5",
-    label: "G5",
-    title: "章节审批",
+    title: "写作审批",
     summary: "等待 gate 状态数据接入。",
     state: "neutral",
   },
@@ -231,7 +217,7 @@ export function GateNav({
         <div style={titleBlockStyle}>
           <span style={eyebrowStyle}>门禁工作流</span>
           <strong style={titleStyle}>论文工作台</strong>
-          <span style={subtitleStyle}>G0–G5 门禁驱动的实验体系推进</span>
+          <span style={subtitleStyle}>G0–G3 门禁驱动的实验体系推进</span>
         </div>
 
         <nav aria-label="Gate 导航" style={{ flex: "1 1 auto" }}>

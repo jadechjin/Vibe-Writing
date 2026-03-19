@@ -469,7 +469,7 @@ def test_manifest_create_requires_g2_readiness(client: TestClient, engine) -> No
     assert body["success"] is False
     assert body["error"] == "System is not ready for manifest generation"
     assert body["data"]["code"] == "conflict"
-    assert body["data"]["details"]["gate"] == "G2"
+    assert body["data"]["details"]["gate"] == "G1"
     assert len(body["data"]["details"]["blockers"]) == 1
     assert body["data"]["details"]["blockers"][0]["code"] == "analysis_not_ready"
 

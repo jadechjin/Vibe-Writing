@@ -24,16 +24,16 @@ from app.persistence.models.system import ExperimentalSystem, SystemSection
 ACTIVE_GATE_BY_STATE: dict[str, GateKey] = {
     SystemState.DRAFT.value: GateKey.G0,
     SystemState.SYSTEM_DEFINED.value: GateKey.G1,
-    SystemState.FIGURE_PLAN_READY.value: GateKey.G2,
-    SystemState.DATA_PENDING.value: GateKey.G2,
-    SystemState.DATA_UPLOADED.value: GateKey.G2,
-    SystemState.ANALYSIS_READY.value: GateKey.G3,
-    SystemState.ASSETS_CONFIRMED.value: GateKey.G4,
-    SystemState.EVIDENCE_MATRIX_READY.value: GateKey.G4,
-    SystemState.OUTLINE_READY.value: GateKey.G5,
-    SystemState.SECTION_DRAFTING.value: GateKey.G5,
-    SystemState.CHAPTER_REVIEW.value: GateKey.G5,
-    SystemState.CHAPTER_APPROVED.value: GateKey.G5,
+    SystemState.FIGURE_PLAN_READY.value: GateKey.G1,
+    SystemState.DATA_PENDING.value: GateKey.G1,
+    SystemState.DATA_UPLOADED.value: GateKey.G1,
+    SystemState.ANALYSIS_READY.value: GateKey.G2,
+    SystemState.ASSETS_CONFIRMED.value: GateKey.G2,
+    SystemState.EVIDENCE_MATRIX_READY.value: GateKey.G2,
+    SystemState.OUTLINE_READY.value: GateKey.G3,
+    SystemState.SECTION_DRAFTING.value: GateKey.G3,
+    SystemState.CHAPTER_REVIEW.value: GateKey.G3,
+    SystemState.CHAPTER_APPROVED.value: GateKey.G3,
 }
 NON_BLOCKING_BLOCKER_CODES = {"snapshot_stale"}
 
@@ -52,13 +52,9 @@ def review_gate(
     if active_gate == GateKey.G0:
         blockers = check_system_defined(session, system)
     elif active_gate == GateKey.G1:
-        blockers = check_figure_plan_ready(session, system)
+        blockers = check_figure_plan_ready(session, system) + check_data_and_analysis_ready(session, system)
     elif active_gate == GateKey.G2:
-        blockers = check_data_and_analysis_ready(session, system)
-    elif active_gate == GateKey.G3:
-        blockers = check_assets_confirmed(session, system)
-    elif active_gate == GateKey.G4:
-        blockers = check_evidence_and_outline_ready(session, system)
+        blockers = check_assets_confirmed(session, system) + check_evidence_and_outline_ready(session, system)
     elif system.status == SystemState.SECTION_DRAFTING.value:
         blockers = check_section_drafting_ready(session, system)
     else:
@@ -165,7 +161,7 @@ def check_data_and_analysis_ready(session: Session, system: ExperimentalSystem) 
                 _build_blocker(
                     code="no_figure_plan_images",
                     message="No figure plans have uploaded images.",
-                    gate=GateKey.G2,
+                    gate=GateKey.G1,
                     current_state=system.status,
                     required_checks=[GateRequirementKey.DATA_UPLOADED],
                     details={"confirmed_plan_count": len(confirmed_plans)},
@@ -176,7 +172,7 @@ def check_data_and_analysis_ready(session: Session, system: ExperimentalSystem) 
                 _build_blocker(
                     code="analysis_not_ready",
                     message="System analysis is not ready.",
-                    gate=GateKey.G2,
+                    gate=GateKey.G1,
                     current_state=system.status,
                     required_checks=[GateRequirementKey.ANALYSIS_READY],
                     details={"succeeded_run_count": 0},
@@ -202,7 +198,7 @@ def check_data_and_analysis_ready(session: Session, system: ExperimentalSystem) 
             _build_blocker(
                 code="analysis_incomplete",
                 message=f"Analysis incomplete for {len(unanalyzed)} figure plans.",
-                gate=GateKey.G2,
+                gate=GateKey.G1,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.ANALYSIS_READY],
                 details={
@@ -259,7 +255,7 @@ def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list
             _build_blocker(
                 code="assets_not_confirmed",
                 message="Assets are not confirmed.",
-                gate=GateKey.G3,
+                gate=GateKey.G2,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.ASSETS_CONFIRMED],
                 details={
@@ -305,7 +301,7 @@ def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list
             _build_blocker(
                 code="figure_plan_missing_assets",
                 message=f"{len(plans_missing_assets)} figure plan(s) have no associated images.",
-                gate=GateKey.G3,
+                gate=GateKey.G2,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.ASSETS_CONFIRMED],
                 details={"figure_nos": plans_missing_assets},
@@ -317,7 +313,7 @@ def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list
             _build_blocker(
                 code="figure_plan_missing_evidence",
                 message=f"{len(plans_missing_evidence)} figure plan(s) have no analysis conclusion.",
-                gate=GateKey.G3,
+                gate=GateKey.G2,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.ASSETS_CONFIRMED],
                 details={"figure_nos": plans_missing_evidence},
@@ -350,7 +346,7 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
             _build_blocker(
                 code="approved_claim_sections_invalid",
                 message="Approved claims reference undefined sections.",
-                gate=GateKey.G4,
+                gate=GateKey.G2,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.EVIDENCE_MATRIX_READY],
                 details={"invalid_claims": invalid_section_claims},
@@ -369,7 +365,7 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
             _build_blocker(
                 code="section_missing_claims",
                 message="Some sections have no approved claims.",
-                gate=GateKey.G4,
+                gate=GateKey.G2,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.EVIDENCE_MATRIX_READY],
                 details={"sections": sections_missing_claims},
@@ -398,7 +394,7 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
             _build_blocker(
                 code="evidence_matrix_not_ready",
                 message="Evidence matrix is not ready.",
-                gate=GateKey.G4,
+                gate=GateKey.G2,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.EVIDENCE_MATRIX_READY],
                 details={
@@ -436,7 +432,7 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
             _build_blocker(
                 code="outline_not_ready",
                 message="Outline is not ready.",
-                gate=GateKey.G4,
+                gate=GateKey.G2,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.OUTLINE_READY],
                 details={
@@ -453,7 +449,7 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
             _build_blocker(
                 code="section_missing_binding",
                 message="Some sections have no outline binding.",
-                gate=GateKey.G4,
+                gate=GateKey.G2,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.OUTLINE_READY],
                 details={"sections": sections_missing_binding},
@@ -479,7 +475,7 @@ def check_evidence_and_outline_ready(session: Session, system: ExperimentalSyste
                             "Outline is based on outdated data."
                             " Regeneration recommended but not required."
                         ),
-                        gate=GateKey.G4,
+                        gate=GateKey.G2,
                         current_state=system.status,
                         required_checks=[GateRequirementKey.OUTLINE_READY],
                         details={
@@ -523,7 +519,7 @@ def check_section_drafting_ready(session: Session, system: ExperimentalSystem) -
             _build_blocker(
                 code="sections_missing_drafts",
                 message=f"{len(missing_sections)} sections have no validated draft.",
-                gate=GateKey.G5,
+                gate=GateKey.G3,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.CHAPTER_APPROVED],
                 details={
@@ -538,7 +534,7 @@ def check_section_drafting_ready(session: Session, system: ExperimentalSystem) -
             _build_blocker(
                 code="sections_missing_traceability",
                 message=f"{len(invalid_sections)} drafts lack traceability mapping.",
-                gate=GateKey.G5,
+                gate=GateKey.G3,
                 current_state=system.status,
                 required_checks=[GateRequirementKey.CHAPTER_APPROVED],
                 details={
@@ -579,7 +575,7 @@ def check_chapter_approved(session: Session, system: ExperimentalSystem) -> list
         _build_blocker(
             code="chapter_not_approved",
             message="Chapter is not approved.",
-            gate=GateKey.G5,
+            gate=GateKey.G3,
             current_state=system.status,
             required_checks=[GateRequirementKey.CHAPTER_APPROVED],
             details={

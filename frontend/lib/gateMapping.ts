@@ -1,6 +1,6 @@
 import type { TaskEvent } from "./websocket"
 
-export const GATE_KEYS = ["G0", "G1", "G2", "G3", "G4", "G5"] as const
+export const GATE_KEYS = ["G0", "G1", "G2", "G3"] as const
 
 export type GateKey = (typeof GATE_KEYS)[number]
 
@@ -10,11 +10,9 @@ type TaskPrefixMapping = Readonly<{
 }>
 
 const TASK_PREFIX_MAPPINGS: readonly TaskPrefixMapping[] = [
-  { gateKey: "G1", prefixes: ["figure_plan"] },
-  { gateKey: "G2", prefixes: ["analysis"] },
-  { gateKey: "G3", prefixes: ["manifest"] },
-  { gateKey: "G4", prefixes: ["evidence", "outline"] },
-  { gateKey: "G5", prefixes: ["draft", "section_draft"] },
+  { gateKey: "G1", prefixes: ["figure_plan", "analysis"] },
+  { gateKey: "G2", prefixes: ["manifest", "evidence", "outline"] },
+  { gateKey: "G3", prefixes: ["draft", "section_draft"] },
 ]
 
 export function isGateKey(value: string | null | undefined): value is GateKey {

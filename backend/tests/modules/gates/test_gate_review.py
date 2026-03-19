@@ -81,16 +81,16 @@ def _create_system(
     [
         (SystemState.DRAFT, GateKey.G0),
         (SystemState.SYSTEM_DEFINED, GateKey.G1),
-        (SystemState.FIGURE_PLAN_READY, GateKey.G2),
-        (SystemState.DATA_PENDING, GateKey.G2),
-        (SystemState.DATA_UPLOADED, GateKey.G2),
-        (SystemState.ANALYSIS_READY, GateKey.G3),
-        (SystemState.ASSETS_CONFIRMED, GateKey.G4),
-        (SystemState.EVIDENCE_MATRIX_READY, GateKey.G4),
-        (SystemState.OUTLINE_READY, GateKey.G5),
-        (SystemState.SECTION_DRAFTING, GateKey.G5),
-        (SystemState.CHAPTER_REVIEW, GateKey.G5),
-        (SystemState.CHAPTER_APPROVED, GateKey.G5),
+        (SystemState.FIGURE_PLAN_READY, GateKey.G1),
+        (SystemState.DATA_PENDING, GateKey.G1),
+        (SystemState.DATA_UPLOADED, GateKey.G1),
+        (SystemState.ANALYSIS_READY, GateKey.G2),
+        (SystemState.ASSETS_CONFIRMED, GateKey.G2),
+        (SystemState.EVIDENCE_MATRIX_READY, GateKey.G2),
+        (SystemState.OUTLINE_READY, GateKey.G3),
+        (SystemState.SECTION_DRAFTING, GateKey.G3),
+        (SystemState.CHAPTER_REVIEW, GateKey.G3),
+        (SystemState.CHAPTER_APPROVED, GateKey.G3),
     ],
 )
 def test_resolve_active_gate_maps_fixed_gate_sequence(
@@ -189,7 +189,7 @@ def test_review_gate_g2_returns_blockers_for_missing_assets_and_analysis(session
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G2
+    assert review.gate == GateKey.G1
     assert review.satisfied is False
     assert {blocker.code for blocker in review.blockers} == {
         "no_figure_plan_images",
@@ -240,7 +240,7 @@ def test_review_gate_g2_passes_with_assets_and_succeeded_analysis(session: Sessi
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G2
+    assert review.gate == GateKey.G1
     assert review.satisfied is True
     assert review.blockers == []
 
@@ -277,7 +277,7 @@ def test_review_gate_g3_passes_with_confirmed_manifest_and_metadata(session: Ses
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G3
+    assert review.gate == GateKey.G2
     assert review.satisfied is True
     assert review.blockers == []
 
@@ -323,7 +323,7 @@ def test_review_gate_g3_uses_latest_manifest_version(session: Session) -> None:
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G3
+    assert review.gate == GateKey.G2
     assert review.satisfied is False
     assert [blocker.code for blocker in review.blockers] == ["assets_not_confirmed"]
     assert review.blockers[0].details["manifest_status"] == "draft"
@@ -352,7 +352,7 @@ def test_review_gate_g3_requires_manifest_and_confirmed_asset_metadata(session: 
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G3
+    assert review.gate == GateKey.G2
     assert review.satisfied is False
     assert [blocker.code for blocker in review.blockers] == ["assets_not_confirmed"]
     assert review.blockers[0].required_checks == [GateRequirementKey.ASSETS_CONFIRMED]
@@ -399,7 +399,7 @@ def test_review_gate_g4_requires_approved_claim_links_and_outline_bindings(
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G4
+    assert review.gate == GateKey.G2
     assert review.satisfied is False
     assert {blocker.code for blocker in review.blockers} == {
         "evidence_matrix_not_ready",
@@ -465,7 +465,7 @@ def test_review_gate_g4_blocks_approved_claims_with_invalid_sections(session: Se
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G4
+    assert review.gate == GateKey.G2
     assert review.satisfied is False
     blockers_by_code = {blocker.code: blocker for blocker in review.blockers}
     assert set(blockers_by_code) == {
@@ -537,7 +537,7 @@ def test_review_gate_g4_keeps_snapshot_stale_as_advisory_warning(session: Sessio
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G4
+    assert review.gate == GateKey.G2
     assert review.satisfied is True
     assert [blocker.code for blocker in review.blockers] == ["snapshot_stale"]
 
@@ -589,7 +589,7 @@ def test_review_gate_g5_requires_latest_draft_for_every_section_to_be_approved(
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G5
+    assert review.gate == GateKey.G3
     assert review.satisfied is False
     assert [blocker.code for blocker in review.blockers] == ["chapter_not_approved"]
     assert review.blockers[0].required_checks == [GateRequirementKey.CHAPTER_APPROVED]
@@ -620,7 +620,7 @@ def test_review_gate_passes_when_gate_facts_are_satisfied(session: Session) -> N
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G5
+    assert review.gate == GateKey.G3
     assert review.satisfied is True
     assert review.blockers == []
 
@@ -684,7 +684,7 @@ def test_review_gate_g4_uses_latest_claim_version_for_approval(session: Session)
 
     review = review_gate(session, system)
 
-    assert review.gate == GateKey.G4
+    assert review.gate == GateKey.G2
     assert review.satisfied is False
 
     evidence_blocker = next(

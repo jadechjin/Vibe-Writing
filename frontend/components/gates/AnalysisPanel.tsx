@@ -8,7 +8,7 @@ import { gateTheme } from "../../styles/gate-theme"
 import { SectionCard } from "../ui/SectionCard"
 import { StatusBadge } from "../ui/StatusBadge"
 import { GateTaskStatus } from "./GateTaskStatus"
-import { AnalysisOverlay } from "./g2/AnalysisOverlay"
+import { AnalysisOverlay } from "./analysis/AnalysisOverlay"
 
 export type GateContentPanelProps = Readonly<{
   snapshot: WorkflowSnapshot | null

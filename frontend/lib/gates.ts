@@ -1,16 +1,14 @@
 import type { GateVisualStatus } from "../components/layout/GateNav"
 import type { WorkflowSnapshot } from "../hooks/useProjectStatus"
 
-export const GATE_ORDER = ["G0", "G1", "G2", "G3", "G4", "G5"] as const
+export const GATE_ORDER = ["G0", "G1", "G2", "G3"] as const
 export type GateKey = (typeof GATE_ORDER)[number]
 
 const GATE_TITLES: Record<GateKey, string> = {
   G0: "体系定义",
-  G1: "Figure Plan",
-  G2: "数据与分析",
-  G3: "资产确认",
-  G4: "证据与提纲",
-  G5: "章节审批",
+  G1: "图表与分析",
+  G2: "证据与提纲",
+  G3: "写作审批",
 }
 
 function resolveGateStatus(
@@ -91,16 +89,16 @@ export function countCompletedGates(snapshot: WorkflowSnapshot | null): number {
 const ACTIVE_GATE_BY_STATE: Partial<Record<string, GateKey>> = {
   Draft: "G0",
   System_Defined: "G1",
-  Figure_Plan_Ready: "G2",
-  Data_Pending: "G2",
-  Data_Uploaded: "G2",
-  Analysis_Ready: "G3",
-  Assets_Confirmed: "G4",
-  Evidence_Matrix_Ready: "G4",
-  Outline_Ready: "G5",
-  Section_Drafting: "G5",
-  Chapter_Review: "G5",
-  Chapter_Approved: "G5",
+  Figure_Plan_Ready: "G1",
+  Data_Pending: "G1",
+  Data_Uploaded: "G1",
+  Analysis_Ready: "G2",
+  Assets_Confirmed: "G2",
+  Evidence_Matrix_Ready: "G2",
+  Outline_Ready: "G3",
+  Section_Drafting: "G3",
+  Chapter_Review: "G3",
+  Chapter_Approved: "G3",
 }
 
 export function countCompletedGatesFromStatus(status: string): number {

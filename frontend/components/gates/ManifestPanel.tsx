@@ -166,7 +166,7 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
 
   return (
     <div style={gateTheme.panel}>
-      <GateTaskStatus systemId={systemId} gateKey="G3" />
+      <GateTaskStatus systemId={systemId} gateKey="G2" />
 
       <ConfirmDialog
         isOpen={showConfirmDialog}

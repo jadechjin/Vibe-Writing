@@ -59,7 +59,7 @@ describe("EvidenceMatrixPanel", () => {
   const systemDetail = buildSystemDetail()
   const baseSnapshot = buildWorkflowSnapshot({
     currentState: "Assets_Confirmed",
-    currentGate: "G4",
+    currentGate: "G2",
   })
 
   beforeEach(() => {
@@ -116,7 +116,7 @@ describe("EvidenceMatrixPanel", () => {
           buildBlocker({
             code: "section_missing_claims",
             message: "Some sections have no approved claims.",
-            gate: "G4",
+            gate: "G2",
             currentState: "Assets_Confirmed",
             requiredChecks: ["Evidence_Matrix_Ready"],
             details: { sections: ["methods", "results"] },
@@ -124,7 +124,7 @@ describe("EvidenceMatrixPanel", () => {
           buildBlocker({
             code: "section_missing_binding",
             message: "Some sections have no outline binding.",
-            gate: "G4",
+            gate: "G2",
             currentState: "Assets_Confirmed",
             requiredChecks: ["Outline_Ready"],
             details: { sections: ["methods", "results"] },
@@ -161,7 +161,7 @@ describe("EvidenceMatrixPanel", () => {
       <EvidenceMatrixPanel
         snapshot={buildWorkflowSnapshot({
           currentState: "Assets_Confirmed",
-          currentGate: "G4",
+          currentGate: "G2",
         })}
         blockers={[]}
         systemId="system-1"
@@ -199,7 +199,7 @@ describe("EvidenceMatrixPanel", () => {
           buildBlocker({
             code: "snapshot_stale",
             message: "Outline is based on outdated data. Regeneration recommended but not required.",
-            gate: "G4",
+            gate: "G2",
             currentState: "Assets_Confirmed",
             requiredChecks: ["Outline_Ready"],
             details: {},

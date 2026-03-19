@@ -320,7 +320,7 @@ async def create_manifest(
             status_code=409,
             details={
                 "system_id": system.id,
-                "gate": GateKey.G2.value,
+                "gate": GateKey.G1.value,
                 "blockers": [blocker.model_dump(mode="json") for blocker in gate_blockers],
             },
         )
@@ -334,7 +334,7 @@ async def create_manifest(
             workflow_key="manifest_generate",
             current_state=system.status,
             target_state=system.status,
-            current_gate=GateKey.G3.value,
+            current_gate=GateKey.G2.value,
             status=TaskStatus.QUEUED,
             context={"requested_manifest_status": payload.status},
             message="Manifest generation started",
@@ -458,7 +458,7 @@ async def complete_manifest_generation(
                 from_state=system.status,
                 to_state=system.status,
                 current_state=system.status,
-                current_gate=GateKey.G3.value,
+                current_gate=GateKey.G2.value,
                 payload={
                     "manifest_id": manifest.id,
                     "manifest_version": manifest.version,
@@ -913,7 +913,7 @@ async def create_analysis_run(
             workflow_key="analysis_run",
             current_state=system.status,
             target_state=system.status,
-            current_gate=GateKey.G2.value,
+            current_gate=GateKey.G1.value,
             status=TaskStatus.QUEUED,
             context={"config": config or {}, "run_type": run_type},
             message="Analysis run started",

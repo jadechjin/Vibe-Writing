@@ -16,7 +16,7 @@ export type G4SnapshotDetail = {
 export type EvidenceGapDetail = {
   gapType: "missing_evidence" | "missing_analysis" | "weak_evidence" | "section_uncovered" | "pending_approval" | "binding_missing"
   severity: "blocker" | "warning" | "info"
-  remediationStage: "G2" | "G3" | "G4"
+  remediationStage: "G1" | "G2"
   claimId: string | null
   sectionKey: string | null
   assetId: string | null

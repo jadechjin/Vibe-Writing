@@ -4,8 +4,8 @@ from app.common.schemas import ApiResponse, JobHandle
 
 
 def test_gate_mapping_is_fixed() -> None:
-    assert GATE_REQUIREMENTS[GateKey.G2][0].value == "Data_Uploaded"
-    assert GATE_REQUIREMENTS[GateKey.G2][1].value == "Analysis_Ready"
+    assert GATE_REQUIREMENTS[GateKey.G1][1].value == "Data_Uploaded"
+    assert GATE_REQUIREMENTS[GateKey.G1][2].value == "Analysis_Ready"
 
 
 def test_job_handle_defaults_to_queued() -> None:

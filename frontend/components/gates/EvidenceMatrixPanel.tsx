@@ -32,12 +32,12 @@ import { SectionCard } from "../ui/SectionCard"
 import { getLatestClaims, getLatestOutline, getOrderedSystemSections } from "./workbenchSelectors"
 import { GateTaskStatus } from "./GateTaskStatus"
 import { useWebSocket } from "../../hooks/useWebSocket"
-import { G4StatsOverview } from "./g4/G4StatsOverview"
-import { ClaimList } from "./g4/ClaimList"
-import { StalenessIndicator } from "./g4/StalenessIndicator"
-import { SectionOutlineList } from "./g4/SectionOutlineList"
-import { G4IssueDetailPanel } from "./g4/G4IssueDetailPanel"
-import { resolveG4IssueDetail, type G4IssueAction } from "./g4/issueDetails"
+import { G4StatsOverview } from "./g2/G4StatsOverview"
+import { ClaimList } from "./g2/ClaimList"
+import { StalenessIndicator } from "./g2/StalenessIndicator"
+import { SectionOutlineList } from "./g2/SectionOutlineList"
+import { G4IssueDetailPanel } from "./g2/G4IssueDetailPanel"
+import { resolveG4IssueDetail, type G4IssueAction } from "./g2/issueDetails"
 
 export type GateContentPanelProps = Readonly<{
   snapshot: WorkflowSnapshot | null

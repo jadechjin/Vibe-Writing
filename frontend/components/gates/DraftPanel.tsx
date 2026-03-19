@@ -1041,7 +1041,7 @@ export function DraftPanel({
     if (workspaceSections.length > 0) {
       return (
         <div style={panelStyle}>
-          <GateTaskStatus systemId={systemId} gateKey="G5" />
+          <GateTaskStatus systemId={systemId} gateKey="G3" />
           <DraftingWorkspace systemId={systemId} sections={workspaceSections} />
         </div>
       )
@@ -1054,7 +1054,7 @@ export function DraftPanel({
       <div style={sectionCardStyle}>
         <div style={titleStyle}>章节起草与审阅</div>
         <div style={descStyle}>
-          当前状态：{currentState ?? "未知"}。G5 现在按 latest draft 真相把 section 稳定分成 approved、needs review、ready to generate 三组，避免 transport 顺序把界面搞成一坨。
+          当前状态：{currentState ?? "未知"}。G3 现在按 latest draft 真相把 section 稳定分成 approved、needs review、ready to generate 三组，避免 transport 顺序把界面搞成一坨。
         </div>
         <div style={summaryGridStyle}>
           <div style={summaryCardStyle}>

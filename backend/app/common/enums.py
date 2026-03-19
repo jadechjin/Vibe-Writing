@@ -6,8 +6,6 @@ class GateKey(StrEnum):
     G1 = "G1"
     G2 = "G2"
     G3 = "G3"
-    G4 = "G4"
-    G5 = "G5"
 
 
 class GateRequirementKey(StrEnum):
@@ -69,14 +67,30 @@ class ReviewDecision(StrEnum):
     FREEZE = "freeze"
 
 
+def coerce_gate_key(raw: str | None) -> GateKey | None:
+    """Normalize legacy gate keys (G4/G5) to new 4-gate scheme."""
+    if raw is None:
+        return None
+    _LEGACY_GATE_MAP: dict[str, GateKey] = {
+        "G0": GateKey.G0,
+        "G1": GateKey.G1,
+        "G2": GateKey.G1,
+        "G3": GateKey.G2,
+        "G4": GateKey.G2,
+        "G5": GateKey.G3,
+    }
+    mapped = _LEGACY_GATE_MAP.get(raw)
+    if mapped is not None:
+        return mapped
+    try:
+        return GateKey(raw)
+    except ValueError:
+        return None
+
+
 GATE_REQUIREMENTS: dict[GateKey, tuple[GateRequirementKey, ...]] = {
     GateKey.G0: (GateRequirementKey.SYSTEM_DEFINED,),
-    GateKey.G1: (GateRequirementKey.FIGURE_PLAN_READY,),
-    GateKey.G2: (GateRequirementKey.DATA_UPLOADED, GateRequirementKey.ANALYSIS_READY),
-    GateKey.G3: (GateRequirementKey.ASSETS_CONFIRMED,),
-    GateKey.G4: (
-        GateRequirementKey.EVIDENCE_MATRIX_READY,
-        GateRequirementKey.OUTLINE_READY,
-    ),
-    GateKey.G5: (GateRequirementKey.CHAPTER_APPROVED,),
+    GateKey.G1: (GateRequirementKey.FIGURE_PLAN_READY, GateRequirementKey.DATA_UPLOADED, GateRequirementKey.ANALYSIS_READY),
+    GateKey.G2: (GateRequirementKey.ASSETS_CONFIRMED, GateRequirementKey.EVIDENCE_MATRIX_READY, GateRequirementKey.OUTLINE_READY),
+    GateKey.G3: (GateRequirementKey.CHAPTER_APPROVED,),
 }

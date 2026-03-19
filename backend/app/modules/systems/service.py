@@ -35,11 +35,9 @@ T = TypeVar("T")
 
 GATE_TARGET_STATE: dict[GateKey, SystemState] = {
     GateKey.G0: SystemState.SYSTEM_DEFINED,
-    GateKey.G1: SystemState.FIGURE_PLAN_READY,
-    GateKey.G2: SystemState.ANALYSIS_READY,
-    GateKey.G3: SystemState.ASSETS_CONFIRMED,
-    GateKey.G4: SystemState.OUTLINE_READY,
-    GateKey.G5: SystemState.CHAPTER_APPROVED,
+    GateKey.G1: SystemState.ANALYSIS_READY,
+    GateKey.G2: SystemState.OUTLINE_READY,
+    GateKey.G3: SystemState.CHAPTER_APPROVED,
 }
 
 DEFAULT_SYSTEM_SECTIONS: tuple[tuple[str, str], ...] = (

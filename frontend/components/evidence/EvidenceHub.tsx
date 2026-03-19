@@ -48,36 +48,22 @@ function resolveEvidenceContent(
       }
     case "G1":
       return {
-        title: "Figure Plan 准备中",
-        description: "当前处于 G1 阶段，需要生成并确认 Figure Plan，确定图表规划与数据需求。",
-        nextAction: "等待 Figure Plan 生成",
-        hint: "Figure Plan 确认后，将进入数据上传与分析阶段。",
+        title: "图表规划与数据分析",
+        description: resolveG1Description(currentState),
+        nextAction: resolveG1Action(currentState),
+        hint: "数据上传并完成分析后，将进入资产确认阶段。",
       }
     case "G2":
       return {
-        title: "数据与分析",
-        description: resolveG2Description(currentState),
-        nextAction: resolveG2Action(currentState),
-        hint: "数据上传并完成分析后，将进入资产确认阶段。",
-      }
-    case "G3":
-      return {
-        title: "资产确认中",
-        description: "当前处于 G3 阶段，需要审核并确认 Manifest 中的全部资产状态。",
+        title: "证据矩阵与提纲",
+        description: "当前处于 G2 阶段，需要审核并确认 Manifest 中的全部资产状态，随后生成 Evidence Matrix 与 Outline。",
         nextAction: "等待 Manifest 确认",
         hint: "资产确认后将生成 Evidence Matrix。",
       }
-    case "G4":
-      return {
-        title: "证据矩阵与提纲",
-        description: "当前处于 G4 阶段，Evidence Matrix 与 Outline 生成中或等待确认。",
-        nextAction: "等待 Evidence Matrix 就绪",
-        hint: "此阶段完成后，证据中枢将展示完整的 claim-figure-analysis 关联面板。",
-      }
-    case "G5":
+    case "G3":
       return {
         title: "章节撰写与审批",
-        description: "当前处于 G5 阶段，逐节生成草稿并提交审批。证据面板将呈现与当前 section 关联的 claims 与 figures。",
+        description: "当前处于 G3 阶段，逐节生成草稿并提交审批。证据面板将呈现与当前 section 关联的 claims 与 figures。",
         hint: "所有 section 审批通过后，本章节即完成。",
       }
     default:
@@ -88,7 +74,7 @@ function resolveEvidenceContent(
   }
 }
 
-function resolveG2Description(currentState: string | null): string {
+function resolveG1Description(currentState: string | null): string {
   switch (currentState) {
     case "Data_Pending":
       return "请上传实验数据与图像文件，为后续分析提供原始素材。"
@@ -97,18 +83,18 @@ function resolveG2Description(currentState: string | null): string {
     case "Analysis_Ready":
       return "数据分析已完成，可推进至资产确认阶段。"
     default:
-      return "当前处于 G2 阶段，请上传数据或等待分析完成。"
+      return "当前处于 G1 阶段，请确认图表规划或上传数据。"
   }
 }
 
-function resolveG2Action(currentState: string | null): string | undefined {
+function resolveG1Action(currentState: string | null): string | undefined {
   switch (currentState) {
     case "Data_Pending":
       return "上传数据文件"
     case "Data_Uploaded":
       return "等待分析完成"
     case "Analysis_Ready":
-      return "推进至 G3"
+      return "推进至 G2"
     default:
       return "等待数据处理"
   }
@@ -167,7 +153,7 @@ export function EvidenceHub({ snapshot, latestBlockers, gateKey, systemId }: Evi
         <G1EvidencePanel systemId={systemId} />
       ) : gateKey === "G2" && systemId ? (
         <G2EvidencePanel systemId={systemId} />
-      ) : gateKey === "G5" && systemId ? (
+      ) : gateKey === "G3" && systemId ? (
         <G5EvidencePanel systemId={systemId} />
       ) : (
         <EmptyEvidenceState

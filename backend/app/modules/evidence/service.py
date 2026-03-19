@@ -918,7 +918,7 @@ async def generate_evidence_matrix(
             workflow_key="evidence_matrix_generate",
             current_state=system.status,
             target_state=system.status,
-            current_gate=GateKey.G4.value,
+            current_gate=GateKey.G2.value,
             status=TaskStatus.QUEUED,
             context={},
             message="Evidence matrix generation started",
@@ -1180,7 +1180,7 @@ async def complete_evidence_matrix_generation(
                 from_state=system.status,
                 to_state=system.status,
                 current_state=system.status,
-                current_gate=GateKey.G4.value,
+                current_gate=GateKey.G2.value,
                 payload={
                     "claim_ids": [claim.id for claim in generated_claims],
                     "claim_count": len(generated_claims),

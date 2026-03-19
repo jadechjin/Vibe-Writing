@@ -102,7 +102,7 @@ async def generate_outline(
             workflow_key="outline_generate",
             current_state=system.status,
             target_state=system.status,
-            current_gate=GateKey.G4.value,
+            current_gate=GateKey.G2.value,
             status=TaskStatus.QUEUED,
             context={},
             message="Outline generation started",
@@ -214,7 +214,7 @@ async def complete_outline_generation(
                 from_state=system.status,
                 to_state=system.status,
                 current_state=system.status,
-                current_gate=GateKey.G4.value,
+                current_gate=GateKey.G2.value,
                 payload={
                     "outline_id": outline.id,
                     "outline_version": outline.version,
@@ -602,7 +602,7 @@ async def generate_section_draft(
             workflow_key="section_draft_generate",
             current_state=system.status,
             target_state=system.status,
-            current_gate=GateKey.G5.value,
+            current_gate=GateKey.G3.value,
             status=TaskStatus.QUEUED,
             context={
                 "section_key": section_key,
@@ -762,7 +762,7 @@ async def complete_section_draft_generation(
                 from_state=system.status,
                 to_state=system.status,
                 current_state=system.status,
-                current_gate=GateKey.G5.value,
+                current_gate=GateKey.G3.value,
                 payload={
                     "draft_id": draft.id,
                     "section_key": draft.section_key,

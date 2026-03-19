@@ -150,16 +150,16 @@ export function normalizeWorkflowSnapshot(raw: RawWorkflowSnapshot | null): Work
 const ACTIVE_GATE_BY_STATE: Partial<Record<string, GateKey>> = {
   Draft: "G0",
   System_Defined: "G1",
-  Figure_Plan_Ready: "G2",
-  Data_Pending: "G2",
-  Data_Uploaded: "G2",
-  Analysis_Ready: "G3",
-  Assets_Confirmed: "G4",
-  Evidence_Matrix_Ready: "G4",
-  Outline_Ready: "G5",
-  Section_Drafting: "G5",
-  Chapter_Review: "G5",
-  Chapter_Approved: "G5",
+  Figure_Plan_Ready: "G1",
+  Data_Pending: "G1",
+  Data_Uploaded: "G1",
+  Analysis_Ready: "G2",
+  Assets_Confirmed: "G2",
+  Evidence_Matrix_Ready: "G2",
+  Outline_Ready: "G3",
+  Section_Drafting: "G3",
+  Chapter_Review: "G3",
+  Chapter_Approved: "G3",
 }
 
 function resolveActiveGateFromState(state: string | null | undefined): GateKey | null {

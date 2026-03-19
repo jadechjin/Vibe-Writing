@@ -111,7 +111,7 @@ describe("DraftPanel smoke coverage", () => {
       <DraftPanel
         snapshot={buildWorkflowSnapshot({
           currentState: "Section_Drafting",
-          currentGate: "G5",
+          currentGate: "G3",
         })}
         blockers={[]}
         systemId="system-1"
@@ -159,7 +159,7 @@ describe("DraftPanel smoke coverage", () => {
       <DraftPanel
         snapshot={buildWorkflowSnapshot({
           currentState: "Chapter_Review",
-          currentGate: "G5",
+          currentGate: "G3",
         })}
         blockers={[]}
         systemId="system-1"
@@ -189,7 +189,7 @@ describe("DraftPanel smoke coverage", () => {
       <DraftPanel
         snapshot={buildWorkflowSnapshot({
           currentState: "Section_Drafting",
-          currentGate: "G5",
+          currentGate: "G3",
           latestEvent: null,
           events: [],
         })}
@@ -209,7 +209,7 @@ describe("DraftPanel smoke coverage", () => {
       <DraftPanel
         snapshot={buildWorkflowSnapshot({
           currentState: "Chapter_Review",
-          currentGate: "G5",
+          currentGate: "G3",
           latestEvent: null,
           events: [],
         })}
@@ -238,7 +238,7 @@ describe("DraftPanel smoke coverage", () => {
       <DraftPanel
         snapshot={buildWorkflowSnapshot({
           currentState: "Chapter_Review",
-          currentGate: "G5",
+          currentGate: "G3",
           latestEvent: null,
           events: [],
         })}
@@ -268,7 +268,7 @@ describe("DraftPanel smoke coverage", () => {
       <DraftPanel
         snapshot={buildWorkflowSnapshot({
           currentState: "Section_Drafting",
-          currentGate: "G5",
+          currentGate: "G3",
         })}
         blockers={[buildBlocker({ message: "Workflow blocker from backend." })]}
         systemId="system-1"
