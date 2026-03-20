@@ -1277,6 +1277,12 @@ _DRAFT_SYSTEM_PROMPT = """你是严谨的工科材料/化学领域学术写手�
 禁止：编造数据、改变章节结构。
 必须：在引用结论时标注 [Claim:claim_id] 标签。
 
+[执行约束]
+你运行在非交互式管道模式。严禁使用 AskUserQuestion 或任何需要用户交互的工具调用。
+如果你有疑问或需要澄清，直接在回复正文中说明，不要试图向用户提问。
+如果当前章节缺少大纲节点或已批准 claims，仍然尽可能基于已有上下文（骨架、图表计划、分析结论等）生成草稿内容。
+将缺失的证据标记为 [Claim:PENDING] 占位，用户后续补充。
+
 [项目约束 — 资产流入协议]
 本系统是证据驱动的论文工作流平台。当你认为需要引入外部文献或新证据来源时，
 请用以下标记包裹，解析器会自动将其流入项目资产体系：
@@ -1629,35 +1635,40 @@ async def send_draft_chat_message_stream(
             status_code=409,
         )
 
-    # Build context for first message
-    context = ""
-    if turn_index == 0:
-        ctx = await assemble_draft_context(session, system_id, section_key)
-        context = ctx.prompt_text
+    # Build context for every message (no --resume, each call is self-contained)
+    ctx = await assemble_draft_context(session, system_id, section_key)
+    context = ctx.prompt_text
+
+    # For non-first messages, prepend conversation history
+    if turn_index > 0:
+        history_msgs = await repository.list_draft_chat_messages(
+            session, chat_session.id,
+        )
+        # Include last 10 turns to keep prompt reasonable
+        recent = [m for m in history_msgs if m.status == "completed"][-10:]
+        if recent:
+            history_text = "\n\n[对话历史]\n" + "\n".join(
+                f"{'用户' if m.role == 'user' else '助手'}: {m.content[:500]}"
+                for m in recent
+            )
+            context = context + history_text
 
     async def _stream() -> AsyncGenerator[str, None]:
         collected: list[str] = []
-        extracted_sid: str | None = None
 
         try:
             async for chunk in invoke_chat_stream(
                 provider, content,
-                session_id=chat_session.provider_session_id,
+                session_id=None,
                 context=context,
             ):
                 if chunk.strip().startswith("__SESSION_ID__:"):
-                    extracted_sid = chunk.strip().split(":", 1)[1].strip()
-                    if extracted_sid != chat_session.provider_session_id:
-                        chat_session.provider_session_id = extracted_sid
-                    await _maybe_await(session.commit())
-                    continue
+                    continue  # Skip session_id lines (no-session-persistence mode)
                 collected.append(chunk)
                 yield f"data: {json.dumps({'type': 'delta', 'content': chunk})}\n\n"
 
             assistant_msg.content = "".join(collected)
             assistant_msg.status = "completed"
-            if extracted_sid and extracted_sid != chat_session.provider_session_id:
-                chat_session.provider_session_id = extracted_sid
             from datetime import UTC
             chat_session.last_message_at = datetime.now(UTC)
 
@@ -1682,6 +1693,8 @@ async def send_draft_chat_message_stream(
             assistant_msg.content = "".join(collected)
             assistant_msg.status = "failed"
             assistant_msg.error_text = str(exc)
+            # Reset provider_session_id so next call starts fresh
+            chat_session.provider_session_id = None
             await _maybe_await(session.commit())
             yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
 

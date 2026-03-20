@@ -56,6 +56,9 @@ def _build_chat_command(
         # Options first, prompt last (best practice)
         # --verbose is required for --output-format stream-json
         # --include-partial-messages enables streaming of partial content
+        # --disallowedTools prevents interactive tools in pipe mode
+        # IMPORTANT: --disallowedTools is variadic (<tools...>), it will greedily
+        # consume subsequent non-flag arguments. Use -- separator before the prompt.
         cmd = [
             "claude",
             "-p",
@@ -64,9 +67,13 @@ def _build_chat_command(
             "stream-json",
             "--include-partial-messages",
             "--dangerously-skip-permissions",
+            "--no-session-persistence",
+            "--disallowedTools",
+            "AskUserQuestion,EnterPlanMode,EnterWorktree,ExitWorktree",
         ]
-        if session_id:
-            cmd.extend(["--resume", session_id])
+        # NOTE: --no-session-persistence means --resume is not possible.
+        # Multi-turn is handled by including conversation history in the prompt.
+        cmd.append("--")  # Separator: everything after is positional (prompt)
         cmd.append(message)  # Prompt as last positional argument
         return cmd
 

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.common.enums import GATE_REQUIREMENTS, GateKey, GateRequirementKey, SystemState, TaskStatus
 from app.common.schemas import Blocker, GateReview
-from app.persistence.models.asset import Asset, AssetMetadata
+from app.persistence.models.asset import Asset
 from app.persistence.models.draft import Outline, OutlineAssetBinding, SectionDraft
 from app.persistence.models.evidence import (
     AnalysisRun,
@@ -35,7 +35,7 @@ ACTIVE_GATE_BY_STATE: dict[str, GateKey] = {
     SystemState.CHAPTER_REVIEW.value: GateKey.G3,
     SystemState.CHAPTER_APPROVED.value: GateKey.G3,
 }
-NON_BLOCKING_BLOCKER_CODES = {"snapshot_stale"}
+NON_BLOCKING_BLOCKER_CODES = {"snapshot_stale", "section_missing_claims"}
 
 
 def resolve_active_gate(system: ExperimentalSystem) -> GateKey:
@@ -222,35 +222,7 @@ def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list
     latest_manifest = _latest_single_by_version(manifests)
     manifest_status = latest_manifest.status if latest_manifest is not None else None
 
-    assets = session.scalars(
-        select(Asset).where(Asset.system_id == system.id)
-    ).all()
-    metadata_rows = session.scalars(
-        select(AssetMetadata).join(Asset, AssetMetadata.asset_id == Asset.id).where(
-            Asset.system_id == system.id
-        )
-    ).all()
-    metadata_by_asset_id = {metadata.asset_id: metadata for metadata in metadata_rows}
-    missing_metadata_asset_ids = [
-        asset.id
-        for asset in assets
-        if not (metadata_by_asset_id.get(asset.id) and (metadata_by_asset_id[asset.id].semantic_description or "").strip())
-    ]
-    pending_qc_asset_ids = [
-        asset.id
-        for asset in assets
-        if not _is_confirmed_status(
-            metadata_by_asset_id.get(asset.id).qc_status
-            if metadata_by_asset_id.get(asset.id) is not None
-            else None
-        )
-    ]
-
-    if (
-        not _is_confirmed_status(manifest_status)
-        or missing_metadata_asset_ids
-        or pending_qc_asset_ids
-    ):
+    if not _is_confirmed_status(manifest_status):
         blockers.append(
             _build_blocker(
                 code="assets_not_confirmed",
@@ -260,8 +232,6 @@ def check_assets_confirmed(session: Session, system: ExperimentalSystem) -> list
                 required_checks=[GateRequirementKey.ASSETS_CONFIRMED],
                 details={
                     "manifest_status": manifest_status,
-                    "missing_metadata_asset_ids": missing_metadata_asset_ids,
-                    "pending_qc_asset_ids": pending_qc_asset_ids,
                 },
             )
         )

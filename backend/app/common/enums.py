@@ -68,24 +68,28 @@ class ReviewDecision(StrEnum):
 
 
 def coerce_gate_key(raw: str | None) -> GateKey | None:
-    """Normalize legacy gate keys (G4/G5) to new 4-gate scheme."""
+    """Normalize legacy gate keys (G4/G5) to new 4-gate scheme.
+
+    Current valid keys (G0-G3) pass through unchanged.
+    Only truly legacy keys from the old 6-gate scheme are remapped:
+      old G2 (Figure Plan) -> new G1
+      old G3 (Assets)      -> new G2
+      old G4 (Evidence)    -> new G2
+      old G5 (Drafting)    -> new G3
+    """
     if raw is None:
         return None
-    _LEGACY_GATE_MAP: dict[str, GateKey] = {
-        "G0": GateKey.G0,
-        "G1": GateKey.G1,
-        "G2": GateKey.G1,
-        "G3": GateKey.G2,
-        "G4": GateKey.G2,
-        "G5": GateKey.G3,
-    }
-    mapped = _LEGACY_GATE_MAP.get(raw)
-    if mapped is not None:
-        return mapped
+    # Current keys pass through first
     try:
         return GateKey(raw)
     except ValueError:
-        return None
+        pass
+    # Legacy-only remapping (old keys that no longer exist in GateKey)
+    _LEGACY_GATE_MAP: dict[str, GateKey] = {
+        "G4": GateKey.G2,
+        "G5": GateKey.G3,
+    }
+    return _LEGACY_GATE_MAP.get(raw)
 
 
 GATE_REQUIREMENTS: dict[GateKey, tuple[GateRequirementKey, ...]] = {

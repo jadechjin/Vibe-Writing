@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from inspect import isawaitable
 from typing import Any, TypeVar
 
@@ -486,13 +487,49 @@ async def get_active_chat_session(
     return result.scalar_one_or_none()
 
 
+STREAMING_STALE_SECONDS = 60  # If streaming for >60s with no client, treat as stale
+
+
 async def is_chat_session_busy(session: SessionLike, chat_session_id: str) -> bool:
-    statement = select(FigurePlanChatMessage.id).where(
+    """Check if a chat session has an active streaming message.
+
+    Messages stuck in 'streaming' status beyond STREAMING_STALE_SECONDS are
+    considered stale (e.g. client disconnected mid-stream) and are automatically
+    marked as failed so the session can be reused.
+    """
+    statement = select(FigurePlanChatMessage).where(
         FigurePlanChatMessage.session_id == chat_session_id,
         FigurePlanChatMessage.status == "streaming",
     )
     result = await _maybe_await(session.execute(statement))
-    return result.scalar_one_or_none() is not None
+    streaming_msg = result.scalar_one_or_none()
+    if streaming_msg is None:
+        return False
+
+    age = datetime.now(UTC) - streaming_msg.created_at.replace(tzinfo=UTC)
+    if age > timedelta(seconds=STREAMING_STALE_SECONDS):
+        streaming_msg.status = "failed"
+        streaming_msg.error_text = "会话超时（客户端连接中断）"
+        await _maybe_await(session.commit())
+        return False
+
+    return True
+
+
+async def force_clear_stale_streaming(session: SessionLike, chat_session_id: str) -> bool:
+    """Force-clear any streaming message regardless of age. Returns True if cleared."""
+    statement = select(FigurePlanChatMessage).where(
+        FigurePlanChatMessage.session_id == chat_session_id,
+        FigurePlanChatMessage.status == "streaming",
+    )
+    result = await _maybe_await(session.execute(statement))
+    streaming_msg = result.scalar_one_or_none()
+    if streaming_msg is None:
+        return False
+    streaming_msg.status = "failed"
+    streaming_msg.error_text = "会话被新请求中断"
+    await _maybe_await(session.commit())
+    return True
 
 
 async def update_chat_session_fields(
@@ -622,6 +659,7 @@ __all__ = [
     "get_next_figure_plan_version",
     "get_next_turn_index",
     "get_system_with_project",
+    "force_clear_stale_streaming",
     "is_chat_session_busy",
     "list_analysis_runs_for_figure_plans",
     "list_analysis_runs_for_system",

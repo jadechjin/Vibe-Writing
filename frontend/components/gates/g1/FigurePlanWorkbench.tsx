@@ -31,34 +31,54 @@ const containerStyle: CSSProperties = {
   background: "rgba(15,23,42,0.3)",
 }
 
-const sidebarStyle: CSSProperties = {
-  width: "25%", minWidth: "180px",
+const listPaneStyle: CSSProperties = {
+  width: "40%", minWidth: "280px",
   borderRight: "1px solid rgba(148,163,184,0.08)",
-  overflowY: "auto", padding: "8px 0",
-}
-
-const sidebarItemBase: CSSProperties = {
-  padding: "8px 14px", fontSize: "12px", fontWeight: 600,
-  cursor: "pointer", color: "#94a3b8",
-  borderLeftWidth: "3px",
-  borderLeftStyle: "solid",
-  borderLeftColor: "transparent",
-}
-
-const sidebarItemActive: CSSProperties = {
-  ...sidebarItemBase, color: "#fb923c",
-  borderLeftColor: "#fb923c", background: "rgba(249,115,22,0.06)",
-}
-
-const middleStyle: CSSProperties = {
-  width: "30%", minWidth: "200px",
-  borderRight: "1px solid rgba(148,163,184,0.08)",
-  overflowY: "auto", padding: "8px",
   display: "flex", flexDirection: "column", gap: "6px",
 }
 
 const rightStyle: CSSProperties = {
   flex: 1, overflowY: "auto", padding: "14px",
+}
+
+const listHeaderStyle: CSSProperties = {
+  padding: "12px",
+  borderBottom: "1px solid rgba(148,163,184,0.08)",
+  display: "flex",
+  flexDirection: "column",
+  gap: "10px",
+}
+
+const filterRowStyle: CSSProperties = {
+  display: "flex",
+  gap: "8px",
+  flexWrap: "wrap",
+}
+
+const filterButtonStyle: CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: "999px",
+  border: "1px solid rgba(148,163,184,0.14)",
+  background: "rgba(15,23,42,0.45)",
+  color: "#94a3b8",
+  fontSize: "12px",
+  fontWeight: 600,
+  cursor: "pointer",
+}
+
+const filterButtonActiveStyle: CSSProperties = {
+  ...filterButtonStyle,
+  border: "1px solid rgba(249,115,22,0.45)",
+  background: "rgba(249,115,22,0.08)",
+  color: "#fb923c",
+}
+
+const listBodyStyle: CSSProperties = {
+  overflowY: "auto",
+  padding: "12px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
 }
 
 const cardStyle: CSSProperties = {
@@ -68,7 +88,7 @@ const cardStyle: CSSProperties = {
 }
 
 const cardActiveStyle: CSSProperties = {
-  ...cardStyle, borderColor: "rgba(251,146,60,0.4)",
+  ...cardStyle, border: "1px solid rgba(251,146,60,0.4)",
   background: "rgba(249,115,22,0.06)",
 }
 
@@ -169,48 +189,61 @@ const cardEditBtnStyle: CSSProperties = {
   cursor: "pointer", fontSize: "13px", padding: "0 2px", flexShrink: 0,
 }
 
-const cardInlineInputStyle: CSSProperties = {
-  width: "100%", padding: "4px 6px", borderRadius: "4px",
-  border: "1px solid rgba(148,163,184,0.2)", background: "rgba(15,23,42,0.6)",
-  color: "#e2e8f0", fontSize: "12px", outline: "none",
+const cardMetaStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "8px",
+  marginBottom: "6px",
 }
 
-const cardInlineBtnRow: CSSProperties = {
-  display: "flex", gap: "6px", justifyContent: "flex-end", marginTop: "6px",
+const cardPreviewStyle: CSSProperties = {
+  fontSize: "12px",
+  color: "#94a3b8",
+  lineHeight: 1.5,
+  display: "-webkit-box",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2,
+  overflow: "hidden",
 }
 
-const cardInlineSaveBtn: CSSProperties = {
-  padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: 600,
-  border: "1px solid rgba(74,222,128,0.4)", background: "rgba(22,101,52,0.15)",
-  color: "#4ade80", cursor: "pointer",
+const cardSecondaryMetaStyle: CSSProperties = {
+  fontSize: "11px",
+  color: "#64748b",
 }
 
-const cardInlineCancelBtn: CSSProperties = {
-  padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: 600,
-  border: "1px solid rgba(148,163,184,0.2)", background: "transparent",
-  color: "#94a3b8", cursor: "pointer",
+const editorOverlayStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(2,6,23,0.72)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: "24px",
+  zIndex: 40,
 }
 
-function InlineCardEditor({ plan, isSaving, onSave, onCancel }: {
-  plan: FigurePlanDetail; isSaving: boolean
-  onSave: (figureNo: string, title: string) => void; onCancel: () => void
-}) {
-  const [figureNo, setFigureNo] = useState(plan.figureNo)
-  const [title, setTitle] = useState(plan.title)
-  return (
-    <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-      <input style={cardInlineInputStyle} value={figureNo}
-        onChange={(e) => setFigureNo(e.target.value)} placeholder="Figure No" />
-      <input style={cardInlineInputStyle} value={title}
-        onChange={(e) => setTitle(e.target.value)} placeholder="标题" />
-      <div style={cardInlineBtnRow}>
-        <button type="button" style={cardInlineCancelBtn} onClick={onCancel}>取消</button>
-        <button type="button" style={isSaving ? { ...cardInlineSaveBtn, opacity: 0.5 } : cardInlineSaveBtn}
-          disabled={isSaving} onClick={() => onSave(figureNo, title)}>
-          {isSaving ? "..." : "保存"}</button>
-      </div>
-    </div>
-  )
+const editorCardStyle: CSSProperties = {
+  width: "min(760px, 100%)",
+  maxHeight: "calc(100vh - 48px)",
+  overflowY: "auto",
+  borderRadius: "16px",
+  border: "1px solid rgba(148,163,184,0.14)",
+  background: "#0f172a",
+  boxShadow: "0 28px 70px rgba(2,6,23,0.45)",
+}
+
+const editorHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "12px",
+  padding: "18px 20px 14px",
+  borderBottom: "1px solid rgba(148,163,184,0.08)",
+}
+
+const editorBodyStyle: CSSProperties = {
+  padding: "18px 20px 20px",
 }
 
 type FigurePlanDraft = {
@@ -278,9 +311,8 @@ export function FigurePlanWorkbench({
 }: FigurePlanWorkbenchProps) {
   const [selectedFilterKey, setSelectedFilterKey] = useState<string | null>("__all__")
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [removedPlanIds, setRemovedPlanIds] = useState<string[]>([])
-  const [editingCardId, setEditingCardId] = useState<string | null>(null)
-  const patchMut = usePatchFigurePlan(systemId)
   const { data: skeletonDetail } = useSkeleton(skeletonId ?? "")
 
   const figureFramework = extractFigureFramework(skeletonDetail?.skeletonJson as Record<string, unknown> | undefined)
@@ -295,11 +327,6 @@ export function FigurePlanWorkbench({
     const fid = normalizeFigureId(plan.figureNo)
     return !fid || !figureIds.has(fid)
   })
-  const planCountsByFigureId = visiblePlans.reduce((counts, plan) => {
-    const fid = normalizeFigureId(plan.figureNo)
-    if (fid) counts.set(fid, (counts.get(fid) ?? 0) + 1)
-    return counts
-  }, new Map<string, number>())
   const filteredPlans = selectedFilterKey === "__all__"
     ? visiblePlans
     : selectedFilterKey === "__unlinked__"
@@ -307,6 +334,7 @@ export function FigurePlanWorkbench({
       : visiblePlans.filter((plan) => normalizeFigureId(plan.figureNo) === selectedFilterKey)
 
   const selectedPlan = filteredPlans.find((plan) => plan.id === selectedPlanId) ?? filteredPlans[0] ?? null
+  const editingPlan = visiblePlans.find((plan) => plan.id === editingPlanId) ?? null
 
   function handleSelectFilter(key: string) {
     setSelectedFilterKey(key)
@@ -324,6 +352,7 @@ export function FigurePlanWorkbench({
 
     setRemovedPlanIds((current) => current.includes(planId) ? current : [...current, planId])
     setSelectedPlanId(nextPlanId)
+    setEditingPlanId((current) => (current === planId ? null : current))
 
     if (nextPlanId) {
       onSelectPlan?.(nextPlanId)
@@ -333,88 +362,90 @@ export function FigurePlanWorkbench({
   return (
     <>
       <div style={containerStyle}>
-        <div style={sidebarStyle}>
-          <div
-            style={selectedFilterKey === "__all__" ? sidebarItemActive : sidebarItemBase}
-            onClick={() => handleSelectFilter("__all__")}
-          >
-            全部 ({visiblePlans.length})
-          </div>
-          {figureFramework.map((fig) => {
-            const count = planCountsByFigureId.get(fig.figureId) ?? 0
-            return (
-              <div
-                key={fig.figureId}
-                style={selectedFilterKey === fig.figureId ? sidebarItemActive : { ...sidebarItemBase, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                onClick={() => handleSelectFilter(fig.figureId)}
-                title={`${fig.figureId}: ${fig.title}`}
+        <div style={listPaneStyle}>
+          <div style={listHeaderStyle}>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "#f8fafc" }}>图表规划列表</div>
+            <div style={filterRowStyle}>
+              <button
+                type="button"
+                style={selectedFilterKey === "__all__" ? filterButtonActiveStyle : filterButtonStyle}
+                onClick={() => handleSelectFilter("__all__")}
               >
-                {fig.figureId}: {fig.title} ({count})
-              </div>
-            )
-          })}
-          {unlinkedPlans.length > 0 ? (
-            <div
-              style={selectedFilterKey === "__unlinked__" ? sidebarItemActive : sidebarItemBase}
-              onClick={() => handleSelectFilter("__unlinked__")}
-            >
-              未关联 ({unlinkedPlans.length})
-            </div>
-          ) : null}
-        </div>
-
-        <div style={middleStyle}>
-          {filteredPlans.length === 0 ? (
-            <div style={emptyStyle}>该筛选条件下暂无图表规划</div>
-          ) : (
-            filteredPlans.map((plan) => {
-              const isActive = selectedPlan?.id === plan.id
-              const statusColor = statusColors[plan.status] ?? statusColors.pending
-              const isCardEditing = editingCardId === plan.id
-              return (
-                <div
-                  key={plan.id}
-                  style={isActive ? cardActiveStyle : cardStyle}
-                  onClick={() => { if (!isCardEditing) handleSelectPlan(plan.id) }}
+                全部 ({visiblePlans.length})
+              </button>
+              {unlinkedPlans.length > 0 ? (
+                <button
+                  type="button"
+                  style={selectedFilterKey === "__unlinked__" ? filterButtonActiveStyle : filterButtonStyle}
+                  onClick={() => handleSelectFilter("__unlinked__")}
                 >
-                  <div style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}>
-                    <span style={{ ...badgeBase, color: statusColor.color, background: statusColor.bg }}>{plan.status}</span>
-                    {plan.methodJson?.importance ? (
-                      <span style={{
-                        ...badgeBase,
-                        color: (importanceColors[String(plan.methodJson.importance)] ?? importanceColors.low).color,
-                        background: (importanceColors[String(plan.methodJson.importance)] ?? importanceColors.low).bg,
-                      }}>
-                        {String(plan.methodJson.importance)}
-                      </span>
-                    ) : null}
-                    <span style={{ marginLeft: "auto" }} />
-                    {!isCardEditing ? (
-                      <button type="button" title="编辑" style={cardEditBtnStyle}
-                        onClick={(e) => { e.stopPropagation(); setEditingCardId(plan.id) }}>✎</button>
-                    ) : null}
-                  </div>
-                  {isCardEditing ? (
-                    <InlineCardEditor
-                      plan={plan}
-                      isSaving={patchMut.isPending}
-                      onSave={(figureNo, title) => {
-                        patchMut.mutate(
-                          { planId: plan.id, input: { figureNo, title } },
-                          { onSuccess: () => setEditingCardId(null) },
-                        )
-                      }}
-                      onCancel={() => setEditingCardId(null)}
-                    />
-                  ) : (
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#e2e8f0" }}>
+                  未关联 ({unlinkedPlans.length})
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div style={listBodyStyle}>
+            {filteredPlans.length === 0 ? (
+              <div style={emptyStyle}>该筛选条件下暂无图表规划</div>
+            ) : (
+              filteredPlans.map((plan) => {
+                const isActive = selectedPlan?.id === plan.id
+                const statusColor = statusColors[plan.status] ?? statusColors.pending
+                const importanceKey = String(plan.methodJson?.importance ?? "")
+                const importanceToken = importanceColors[importanceKey] ?? null
+                return (
+                  <div
+                    key={plan.id}
+                    style={isActive ? cardActiveStyle : cardStyle}
+                    onClick={() => handleSelectPlan(plan.id)}
+                  >
+                    <div style={cardMetaStyle}>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ ...badgeBase, color: statusColor.color, background: statusColor.bg }}>
+                          {plan.status}
+                        </span>
+                        {importanceToken ? (
+                          <span
+                            style={{
+                              ...badgeBase,
+                              color: importanceToken.color,
+                              background: importanceToken.bg,
+                            }}
+                          >
+                            {importanceKey}
+                          </span>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Open Figure Plan Editor"
+                        title="编辑"
+                        style={{
+                          ...cardEditBtnStyle,
+                          color: plan.briefText ? "#f8fafc" : "#60a5fa",
+                        }}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setEditingPlanId(plan.id)
+                        }}
+                      >
+                        ✎
+                      </button>
+                    </div>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#e2e8f0", marginBottom: "6px" }}>
                       {plan.figureNo}: {plan.title}
                     </div>
-                  )}
-                </div>
-              )
-            })
-          )}
+                    <div style={cardPreviewStyle}>
+                      {plan.claimText || plan.briefText || "暂无论证摘要，点击编辑补充图表规划信息。"}
+                    </div>
+                    <div style={{ ...cardSecondaryMetaStyle, marginTop: "8px" }}>
+                      {plan.sectionKey ? `章节：${plan.sectionKey}` : "未关联章节"}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
         </div>
 
         <div style={rightStyle}>
@@ -423,15 +454,23 @@ export function FigurePlanWorkbench({
               key={selectedPlan.id}
               systemId={systemId}
               plan={selectedPlan}
-              sections={sections}
               figureFramework={figureFramework}
               onDeleteSuccess={handleDeleteSuccess}
+              onEdit={() => setEditingPlanId(selectedPlan.id)}
             />
           ) : (
             <div style={emptyStyle}>选择一个图表规划查看详情</div>
           )}
         </div>
       </div>
+      {editingPlan ? (
+        <FigurePlanEditorOverlay
+          systemId={systemId}
+          plan={editingPlan}
+          sections={sections}
+          onClose={() => setEditingPlanId(null)}
+        />
+      ) : null}
     </>
   )
 }
@@ -446,57 +485,20 @@ const confirmButtonStyle: CSSProperties = {
 function FigurePlanDetailPanel({
   systemId,
   plan,
-  sections,
   figureFramework,
   onDeleteSuccess,
+  onEdit,
 }: Readonly<{
   systemId: string
   plan: FigurePlanDetail
-  sections: Section[]
   figureFramework: FigureFrameworkEntry[]
   onDeleteSuccess: (planId: string) => void
+  onEdit: () => void
 }>) {
-  const patchMut = usePatchFigurePlan(systemId)
   const deleteMut = useDeleteFigurePlan(systemId)
   const confirmMut = useConfirmFigurePlan(systemId)
 
   const canConfirm = plan.status !== "confirmed" && plan.status !== "approved" && plan.status !== "delivered"
-
-  const [isEditing, setIsEditing] = useState(false)
-  const [draft, setDraft] = useState<FigurePlanDraft>(() => buildDraftFromPlan(plan))
-
-  function handleDraftChange<K extends keyof FigurePlanDraft>(key: K, value: FigurePlanDraft[K]) {
-    setDraft((current) => ({ ...current, [key]: value }))
-  }
-
-  function handleStartEdit() {
-    setDraft(buildDraftFromPlan(plan))
-    setIsEditing(true)
-  }
-
-  function handleCancelEdit() {
-    setDraft(buildDraftFromPlan(plan))
-    setIsEditing(false)
-  }
-
-  function handleSave() {
-    const input: FigurePlanPatchInput = {
-      figureNo: draft.figureNo,
-      title: draft.title,
-      claimText: draft.claimText,
-      briefText: draft.briefText.trim() ? draft.briefText : null,
-      sectionKey: draft.sectionKey || null,
-    }
-
-    patchMut.mutate(
-      { planId: plan.id, input },
-      {
-        onSuccess: () => {
-          setIsEditing(false)
-        },
-      },
-    )
-  }
 
   function handleDelete() {
     if (!window.confirm("确定要删除这个图表规划吗？")) return
@@ -513,42 +515,165 @@ function FigurePlanDetailPanel({
         <div style={{ fontSize: "15px", fontWeight: 700, color: "#f8fafc" }}>
           {plan.figureNo}: {plan.title}
         </div>
-        {!isEditing ? (
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {canConfirm ? (
-              <button
-                type="button"
-                aria-label="Confirm Figure Plan"
-                onClick={() => confirmMut.mutate(plan.id)}
-                disabled={confirmMut.isPending}
-                style={confirmMut.isPending ? { ...confirmButtonStyle, ...buttonDisabledStyle } : confirmButtonStyle}
-              >
-                {confirmMut.isPending ? "确认中..." : "确认规划"}
-              </button>
-            ) : null}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {canConfirm ? (
             <button
               type="button"
-              aria-label="Edit Figure Plan"
-              onClick={handleStartEdit}
-              style={editButtonStyle}
+              aria-label="Confirm Figure Plan"
+              onClick={() => confirmMut.mutate(plan.id)}
+              disabled={confirmMut.isPending}
+              style={confirmMut.isPending ? { ...confirmButtonStyle, ...buttonDisabledStyle } : confirmButtonStyle}
             >
-              编辑
+              {confirmMut.isPending ? "确认中..." : "确认规划"}
             </button>
-            <button
-              type="button"
-              aria-label="Delete Figure Plan"
-              onClick={handleDelete}
-              disabled={deleteMut.isPending}
-              style={deleteMut.isPending ? { ...dangerButtonStyle, ...buttonDisabledStyle } : dangerButtonStyle}
-            >
-              删除
-            </button>
-          </div>
-        ) : null}
+          ) : null}
+          <button
+            type="button"
+            aria-label="Edit Figure Plan"
+            onClick={onEdit}
+            style={editButtonStyle}
+          >
+            编辑
+          </button>
+          <button
+            type="button"
+            aria-label="Delete Figure Plan"
+            onClick={handleDelete}
+            disabled={deleteMut.isPending}
+            style={deleteMut.isPending ? { ...dangerButtonStyle, ...buttonDisabledStyle } : dangerButtonStyle}
+          >
+            删除
+          </button>
+        </div>
       </div>
 
-      {isEditing ? (
-        <div>
+      {plan.claimText ? (
+        <>
+          <div style={detailLabelStyle}>论证目的</div>
+          <div style={detailValueStyle}>{plan.claimText}</div>
+        </>
+      ) : null}
+
+      {(() => {
+        const q = plan.dataQuestion ?? figureFramework.find((f) => f.figureId === plan.figureNo)?.dataQuestion
+        return q ? (
+          <>
+            <div style={detailLabelStyle}>数据问题</div>
+            <div style={{ ...detailValueStyle, color: "#fbbf24" }}>{q}</div>
+          </>
+        ) : null
+      })()}
+
+      {plan.sectionKey ? (
+        <>
+          <div style={detailLabelStyle}>关联章节</div>
+          <div style={detailValueStyle}>{plan.sectionKey}</div>
+        </>
+      ) : null}
+
+      {plan.skeletonVersion != null ? (
+        <>
+          <div style={detailLabelStyle}>骨架版本</div>
+          <div style={detailValueStyle}>v{plan.skeletonVersion}</div>
+        </>
+      ) : null}
+
+      {plan.briefText ? (
+        <>
+          <div style={detailLabelStyle}>图表简述</div>
+          <div style={{
+            ...detailValueStyle,
+            padding: "8px 10px",
+            borderRadius: "8px",
+            background: "rgba(15,23,42,0.5)",
+            border: "1px solid rgba(148,163,184,0.08)",
+          }}>
+            {plan.briefText}
+          </div>
+        </>
+      ) : null}
+
+      {plan.briefConfirmedAt ? (
+        <>
+          <div style={detailLabelStyle}>简述确认时间</div>
+          <div style={detailValueStyle}>{new Date(plan.briefConfirmedAt).toLocaleString()}</div>
+        </>
+      ) : null}
+
+      <div style={{ marginTop: "16px" }}>
+        <FigurePlanUpload planId={plan.id} />
+      </div>
+
+      <div style={{ marginTop: "10px" }}>
+        <AgentChat key={plan.id} planId={plan.id} />
+      </div>
+    </div>
+  )
+}
+
+function FigurePlanEditorOverlay({
+  systemId,
+  plan,
+  sections,
+  onClose,
+}: Readonly<{
+  systemId: string
+  plan: FigurePlanDetail
+  sections: Section[]
+  onClose: () => void
+}>) {
+  const patchMut = usePatchFigurePlan(systemId)
+  const [draft, setDraft] = useState<FigurePlanDraft>(() => buildDraftFromPlan(plan))
+
+  useEffect(() => {
+    setDraft(buildDraftFromPlan(plan))
+  }, [plan])
+
+  function handleDraftChange<K extends keyof FigurePlanDraft>(key: K, value: FigurePlanDraft[K]) {
+    setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  function handleSave() {
+    const input: FigurePlanPatchInput = {
+      figureNo: draft.figureNo,
+      title: draft.title,
+      claimText: draft.claimText,
+      briefText: draft.briefText.trim() ? draft.briefText : null,
+      sectionKey: draft.sectionKey || null,
+    }
+
+    patchMut.mutate(
+      { planId: plan.id, input },
+      {
+        onSuccess: () => {
+          onClose()
+        },
+      },
+    )
+  }
+
+  return (
+    <div style={editorOverlayStyle}>
+      <div role="dialog" aria-modal="true" aria-labelledby="figure-plan-editor-title" style={editorCardStyle}>
+        <div style={editorHeaderStyle}>
+          <div>
+            <div id="figure-plan-editor-title" style={{ fontSize: "16px", fontWeight: 700, color: "#f8fafc" }}>
+              编辑图表规划
+            </div>
+            <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "4px" }}>
+              {plan.figureNo}: {plan.title}
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Close Figure Plan Editor"
+            onClick={onClose}
+            style={buttonBaseStyle}
+          >
+            关闭
+          </button>
+        </div>
+        <div style={editorBodyStyle}>
           <div style={fieldBlockStyle}>
             <label style={fieldLabelStyle}>
               Figure No
@@ -617,12 +742,7 @@ function FigurePlanDetailPanel({
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-            <button
-              type="button"
-              aria-label="Cancel Editing"
-              onClick={handleCancelEdit}
-              style={buttonBaseStyle}
-            >
+            <button type="button" aria-label="Cancel Editing" onClick={onClose} style={buttonBaseStyle}>
               取消
             </button>
             <button
@@ -636,70 +756,7 @@ function FigurePlanDetailPanel({
             </button>
           </div>
         </div>
-      ) : (
-        <>
-          {plan.claimText ? (
-            <>
-              <div style={detailLabelStyle}>论证目的</div>
-              <div style={detailValueStyle}>{plan.claimText}</div>
-            </>
-          ) : null}
-
-          {(() => {
-            const q = plan.dataQuestion ?? figureFramework.find((f) => f.figureId === plan.figureNo)?.dataQuestion
-            return q ? (
-              <>
-                <div style={detailLabelStyle}>数据问题</div>
-                <div style={{ ...detailValueStyle, color: "#fbbf24" }}>{q}</div>
-              </>
-            ) : null
-          })()}
-
-          {plan.sectionKey ? (
-            <>
-              <div style={detailLabelStyle}>关联章节</div>
-              <div style={detailValueStyle}>{plan.sectionKey}</div>
-            </>
-          ) : null}
-
-          {plan.skeletonVersion != null ? (
-            <>
-              <div style={detailLabelStyle}>骨架版本</div>
-              <div style={detailValueStyle}>v{plan.skeletonVersion}</div>
-            </>
-          ) : null}
-
-          {plan.briefText ? (
-            <>
-              <div style={detailLabelStyle}>图表简述</div>
-              <div style={{
-                ...detailValueStyle,
-                padding: "8px 10px",
-                borderRadius: "8px",
-                background: "rgba(15,23,42,0.5)",
-                border: "1px solid rgba(148,163,184,0.08)",
-              }}>
-                {plan.briefText}
-              </div>
-            </>
-          ) : null}
-
-          {plan.briefConfirmedAt ? (
-            <>
-              <div style={detailLabelStyle}>简述确认时间</div>
-              <div style={detailValueStyle}>{new Date(plan.briefConfirmedAt).toLocaleString()}</div>
-            </>
-          ) : null}
-
-          <div style={{ marginTop: "16px" }}>
-            <FigurePlanUpload planId={plan.id} />
-          </div>
-
-          <div style={{ marginTop: "10px" }}>
-            <AgentChat key={plan.id} planId={plan.id} />
-          </div>
-        </>
-      )}
+      </div>
     </div>
   )
 }

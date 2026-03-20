@@ -3,7 +3,6 @@ import type { CSSProperties } from "react"
 import { EmptyEvidenceState } from "./EmptyEvidenceState"
 import { G0EvidencePanel } from "./G0EvidencePanel"
 import { G1EvidencePanel } from "./G1EvidencePanel"
-import { G2EvidencePanel } from "./G2EvidencePanel"
 import { G5EvidencePanel } from "./G5EvidencePanel"
 import type { WorkflowSnapshot, Blocker } from "../../hooks/useProjectStatus"
 
@@ -108,37 +107,6 @@ const containerStyle: CSSProperties = {
   gap: "16px",
 }
 
-const blockerSectionStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "8px",
-  padding: "14px 16px",
-  borderRadius: "14px",
-  border: "1px solid rgba(248, 113, 113, 0.25)",
-  background: "rgba(127, 29, 29, 0.1)",
-}
-
-const blockerTitleStyle: CSSProperties = {
-  fontSize: "12px",
-  fontWeight: 700,
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  color: "#fca5a5",
-}
-
-const blockerItemStyle: CSSProperties = {
-  fontSize: "13px",
-  color: "#fecaca",
-  lineHeight: 1.5,
-}
-
-const blockerCodeStyle: CSSProperties = {
-  fontSize: "11px",
-  fontWeight: 600,
-  color: "#f87171",
-  marginRight: "6px",
-}
-
 // ---- Component ----
 
 export function EvidenceHub({ snapshot, latestBlockers, gateKey, systemId }: EvidenceHubProps) {
@@ -151,8 +119,6 @@ export function EvidenceHub({ snapshot, latestBlockers, gateKey, systemId }: Evi
         <G0EvidencePanel systemId={systemId} />
       ) : gateKey === "G1" && systemId ? (
         <G1EvidencePanel systemId={systemId} />
-      ) : gateKey === "G2" && systemId ? (
-        <G2EvidencePanel systemId={systemId} />
       ) : gateKey === "G3" && systemId ? (
         <G5EvidencePanel systemId={systemId} />
       ) : (
@@ -163,18 +129,6 @@ export function EvidenceHub({ snapshot, latestBlockers, gateKey, systemId }: Evi
           hint={content.hint}
         />
       )}
-
-      {latestBlockers.length > 0 ? (
-        <div style={blockerSectionStyle}>
-          <div style={blockerTitleStyle}>当前阻塞项</div>
-          {latestBlockers.map((blocker, idx) => (
-            <div key={`${blocker.code}-${idx}`} style={blockerItemStyle}>
-              <span style={blockerCodeStyle}>[{blocker.code}]</span>
-              {blocker.message}
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { GatePanel } from "../../../../../components/gates/GatePanel"
 import { StatusTray } from "../../../../../components/tasks/StatusTray"
 import { WebSocketProvider } from "../../../../../contexts/WebSocketContext"
 import type { GateKey } from "../../../../../lib/gateMapping"
+import { resolveBlockerDisplay } from "../../../../../lib/blockerMessages"
 import { useProjectStatus, useWorkflowInvalidation } from "../../../../../hooks/useProjectStatus"
 import {
   useSystemAdvance,
@@ -87,10 +88,24 @@ const blockerItemStyle: CSSProperties = {
   marginTop: "8px",
 }
 
+const warningItemStyle: CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: "10px",
+  border: "1px solid rgba(251, 191, 36, 0.2)",
+  background: "rgba(120, 53, 15, 0.08)",
+  marginTop: "8px",
+}
+
 const blockerCodeStyle: CSSProperties = {
   fontSize: "12px",
   fontWeight: 600,
   color: "#fca5a5",
+}
+
+const warningCodeStyle: CSSProperties = {
+  fontSize: "12px",
+  fontWeight: 600,
+  color: "#fbbf24",
 }
 
 const blockerMsgStyle: CSSProperties = {
@@ -99,31 +114,49 @@ const blockerMsgStyle: CSSProperties = {
   marginTop: "2px",
 }
 
+const warningMsgStyle: CSSProperties = {
+  fontSize: "13px",
+  color: "#fde68a",
+  marginTop: "2px",
+}
+
+const NON_BLOCKING_CODES = new Set(["snapshot_stale", "section_missing_claims"])
+
 // ---- Helpers ----
 
-function AdvanceOutcome({ data }: { data: AdvanceResponse }) {
+function AdvanceOutcome({ data, onDismiss }: { data: AdvanceResponse; onDismiss: () => void }) {
   if (data.outcome === "blocked") {
     return (
       <div style={outcomeBlockedStyle}>
-        <div style={{ fontSize: "14px", fontWeight: 600, color: "#fca5a5" }}>
-          推进被阻止于 {data.gate}
-        </div>
-        <div style={{ fontSize: "13px", color: "#fecaca", marginTop: "4px" }}>
-          当前状态：{data.currentState}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: "#fca5a5" }}>
+              推进被阻止于 {data.gate}
+            </div>
+            <div style={{ fontSize: "13px", color: "#fecaca", marginTop: "4px" }}>
+              当前状态：{data.currentState}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onDismiss}
+            style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "18px", padding: "0 4px", lineHeight: 1 }}
+          >
+            &times;
+          </button>
         </div>
         {data.blockers.length > 0 ? (
           <div>
-            {data.blockers.map((blocker, i) => (
-              <div key={`${blocker.code}-${i}`} style={blockerItemStyle}>
-                <div style={blockerCodeStyle}>{blocker.code}</div>
-                <div style={blockerMsgStyle}>{blocker.message}</div>
-                {blocker.requiredChecks.length > 0 ? (
-                  <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "4px" }}>
-                    需要：{blocker.requiredChecks.join(", ")}
-                  </div>
-                ) : null}
-              </div>
-            ))}
+            {data.blockers.map((blocker, i) => {
+              const display = resolveBlockerDisplay(blocker)
+              const isWarning = NON_BLOCKING_CODES.has(blocker.code)
+              return (
+                <div key={`${blocker.code}-${i}`} style={isWarning ? warningItemStyle : blockerItemStyle}>
+                  <div style={isWarning ? warningCodeStyle : blockerCodeStyle}>{display.label}</div>
+                  <div style={isWarning ? warningMsgStyle : blockerMsgStyle}>{display.detail}</div>
+                </div>
+              )
+            })}
           </div>
         ) : null}
       </div>
@@ -206,6 +239,7 @@ function SystemWorkspacePage({
   }, [selectedGate, selectedGateIsValid])
 
   const effectiveGateKey = selectedGateIsValid ? selectedGate : authoritativeGateKey
+  const isG2 = effectiveGateKey === "G2"
   const gateVisualState = useMemo(() => {
     if (!effectiveGateKey) {
       return "neutral"
@@ -227,7 +261,7 @@ function SystemWorkspacePage({
   const latestBlockers = snapshot?.latestBlockers ?? []
   const latestEvent = snapshot?.latestEvent ?? null
 
-  const evidencePanel = (
+  const evidencePanel = isG2 ? null : (
     <EvidenceHub
       snapshot={snapshot}
       latestBlockers={latestBlockers}
@@ -284,7 +318,7 @@ function SystemWorkspacePage({
         </button>
       </div>
 
-      {advanceResult ? <AdvanceOutcome data={advanceResult} /> : null}
+      {advanceResult ? <AdvanceOutcome data={advanceResult} onDismiss={resetAdvance} /> : null}
 
       {advanceError ? (
         <div style={{ color: "#f87171", fontSize: "13px", marginBottom: "4px" }}>

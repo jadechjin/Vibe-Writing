@@ -218,28 +218,43 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
             </div>
           ) : null}
 
-          {/* Manifest status bar */}
-          <div style={manifestBarStyle}>
-            {manifestConfirmed ? (
+          {/* Manifest confirm action */}
+          {manifestConfirmed ? (
+            <div style={manifestBarStyle}>
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>Manifest v{manifest!.version}</span>
+                <span style={{ fontSize: "13px", color: "#4ade80", fontWeight: 600 }}>Manifest 已确认</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8" }}>v{manifest!.version}</span>
                 <StatusBadge status={manifest!.status} />
               </div>
-            ) : (
-              <>
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>
-                  {hasBlockers ? "存在阻塞项，无法确认" : "预览就绪，可确认冻结"}
-                </span>
-                <ActionButton
-                  label="确认 Manifest"
-                  onClick={() => setShowConfirmDialog(true)}
-                  disabled={hasBlockers || confirmManifest.isPending}
-                  isPending={confirmManifest.isPending}
-                  style={{ padding: "4px 12px", fontSize: "11px" }}
-                />
-              </>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div style={{
+              padding: "16px",
+              borderRadius: "12px",
+              border: hasBlockers ? "1px solid rgba(251, 191, 36, 0.3)" : "1px solid rgba(34, 197, 94, 0.3)",
+              background: hasBlockers ? "rgba(120, 53, 15, 0.12)" : "rgba(20, 83, 45, 0.12)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+              alignItems: "center",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: hasBlockers ? "#fbbf24" : "#4ade80" }}>
+                {hasBlockers ? "存在资产问题，请先解决下方标记的阻塞项" : "全部资产审核通过，可以确认冻结"}
+              </div>
+              {hasBlockers ? (
+                <div style={{ fontSize: "12px", color: "#94a3b8" }}>
+                  {blockerIssues.length} 个阻塞项需要解决后才能确认 Manifest
+                </div>
+              ) : null}
+              <ActionButton
+                label="确认 Manifest"
+                onClick={() => setShowConfirmDialog(true)}
+                disabled={hasBlockers || confirmManifest.isPending}
+                isPending={confirmManifest.isPending}
+              />
+            </div>
+          )}
 
           {/* Layer 2: FigurePlan audit list */}
           <SectionCard title="图表计划审计" description="以图表计划为核心的资产完整性审阅。">
@@ -308,17 +323,6 @@ export function ManifestPanel({ systemId, blockers }: GateContentPanelProps) {
                   </span>
                 ))}
               </div>
-            </SectionCard>
-          ) : null}
-
-          {/* Gate-level blockers */}
-          {blockers.length > 0 ? (
-            <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>门禁阻塞 ({blockers.length})</span>}>
-              {blockers.map((b, i) => (
-                <div key={`${b.code}-${i}`} style={blockerItemStyle}>
-                  <strong>{b.code}</strong>: {b.message}
-                </div>
-              ))}
             </SectionCard>
           ) : null}
 

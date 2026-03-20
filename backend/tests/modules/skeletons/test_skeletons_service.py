@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import subprocess
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -76,12 +75,25 @@ def test_parse_skeleton_json_requires_sections_key() -> None:
     assert exc_info.value.details["missing_keys"] == ["sections"]
 
 
+def test_build_provider_shell_script_streams_output_to_file() -> None:
+    script = service._build_provider_shell_script(
+        service.SkeletonProvider.CLAUDE,
+        prompt_file="F:\\tmp\\_prompt.txt",
+        output_file="F:\\tmp\\_output.txt",
+    )
+
+    assert "Out-File -FilePath \"F:\\tmp\\_output.txt\" -Append -Encoding UTF8" in script
+    assert "Tee-Object -Encoding UTF8" not in script
+    assert "Out-String" not in script
+    assert "$output =" not in script
+
+
 @pytest.mark.asyncio
-async def test_invoke_provider_retries_empty_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
-    """_invoke_provider retries when output file is empty, succeeds on second attempt."""
+async def test_invoke_provider_fails_immediately_on_empty_stdout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_invoke_provider should not auto-retry after an empty CLI output."""
     attempt_count = 0
-    output_contents = ["", '{"sections":[]}']
-    # Track the tmp_dir created by _invoke_provider so we can write to its _output.txt
     created_dirs: list[Path] = []
 
     original_mkdtemp = tempfile.mkdtemp
@@ -93,10 +105,9 @@ async def test_invoke_provider_retries_empty_stdout(monkeypatch: pytest.MonkeyPa
 
     async def fake_to_thread(fn: object, *_args: object, **_kwargs: object) -> int:
         nonlocal attempt_count
-        # Write the simulated output to the _output.txt that _invoke_provider created
         if created_dirs:
             out = created_dirs[-1] / "_output.txt"
-            out.write_text(output_contents[attempt_count], encoding="utf-8")
+            out.write_text("", encoding="utf-8")
         attempt_count += 1
         return 0
 
@@ -109,11 +120,68 @@ async def test_invoke_provider_retries_empty_stdout(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(service.asyncio, "to_thread", fake_to_thread)
     monkeypatch.setattr(service.asyncio, "sleep", fake_sleep)
 
-    raw = await service._invoke_provider(service.SkeletonProvider.CLAUDE, "prompt")
+    with pytest.raises(AppException) as exc_info:
+        await service._invoke_provider(service.SkeletonProvider.CLAUDE, "prompt")
+
+    assert exc_info.value.code == ErrorCode.WORKFLOW_ERROR.value
+    assert exc_info.value.message == "claude CLI returned empty output"
+    assert attempt_count == 1
+    assert sleep_calls == []
+
+
+@pytest.mark.asyncio
+async def test_invoke_provider_accepts_timeout_when_streamed_output_exists(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_file = tmp_path / "_output.txt"
+    monotonic_values = iter([0.0, 0.0, service.CLAUDE_CLI_TIMEOUT_SECONDS + 1])
+    sleep_calls: list[int] = []
+    terminate_calls: list[float | None] = []
+    original_monotonic = service.time.monotonic
+
+    class _FakeProcess:
+        returncode = None
+
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            terminate_calls.append(None)
+
+        def wait(self, timeout: float | None = None) -> int:
+            terminate_calls[-1] = timeout
+            self.returncode = 0
+            return 0
+
+        def kill(self) -> None:
+            raise AssertionError("kill should not be needed when process terminates cleanly")
+
+    async def fake_to_thread(fn: object, *_args: object, **_kwargs: object) -> int:
+        return fn()
+
+    def fake_monotonic() -> float:
+        return next(monotonic_values, original_monotonic())
+
+    def fake_sleep(seconds: int) -> None:
+        sleep_calls.append(seconds)
+        output_file.write_text('{"sections":[]}', encoding="utf-8")
+
+    monkeypatch.setattr(service.sys, "platform", "win32")
+    monkeypatch.setattr(service.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr(service.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(service.time, "sleep", fake_sleep)
+    monkeypatch.setattr(service.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+
+    raw = await service._invoke_provider(
+        service.SkeletonProvider.CLAUDE,
+        "prompt",
+        work_dir=str(tmp_path),
+    )
 
     assert raw == '{"sections":[]}'
-    assert attempt_count == 2
     assert sleep_calls == [2]
+    assert terminate_calls == [5]
 
 
 @pytest.mark.asyncio

@@ -81,7 +81,7 @@ export function useDeleteFigurePlanAsset(planId: string) {
 
   return useMutation({
     mutationFn: (bindingId: string) =>
-      apiRequest<void>(`/figure-plan-assets/${bindingId}`, {
+      apiRequest<void>(`/figure-plans/${planId}/assets/${bindingId}`, {
         method: "DELETE",
       }),
     onSuccess: () => {

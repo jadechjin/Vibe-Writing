@@ -76,6 +76,38 @@ def _create_system(
     return system
 
 
+def _setup_confirmed_assets(session: Session, system: ExperimentalSystem) -> Asset:
+    """Create a confirmed asset with metadata and manifest so G2 assets check passes."""
+    asset = Asset(
+        project_id=system.project_id,
+        system_id=system.id,
+        asset_type="figure",
+        file_name="figure-1.png",
+        storage_key="assets/figure-1.png",
+        uploaded_by="owner-1",
+    )
+    session.add(asset)
+    session.flush()
+    session.add_all(
+        [
+            AssetMetadata(
+                asset_id=asset.id,
+                semantic_description="Confirmed figure",
+                qc_status="confirmed",
+            ),
+            AssetManifest(
+                project_id=system.project_id,
+                system_id=system.id,
+                version=1,
+                status="confirmed",
+                manifest_json={"assetCount": 1},
+            ),
+        ]
+    )
+    session.flush()
+    return asset
+
+
 @pytest.mark.parametrize(
     ("status", "expected_gate"),
     [
@@ -178,8 +210,10 @@ def test_review_gate_uses_latest_figure_plan_versions(session: Session) -> None:
 
     assert review.gate == GateKey.G1
     assert review.satisfied is False
-    assert [blocker.code for blocker in review.blockers] == ["figure_plan_not_ready"]
-    assert review.blockers[0].details["unready_plans"] == [
+    blocker_codes = {b.code for b in review.blockers}
+    assert "figure_plan_not_ready" in blocker_codes
+    fp_blocker = next(b for b in review.blockers if b.code == "figure_plan_not_ready")
+    assert fp_blocker.details["unready_plans"] == [
         {"figure_no": "F1", "status": "draft", "version": 2}
     ]
 
@@ -191,9 +225,9 @@ def test_review_gate_g2_returns_blockers_for_missing_assets_and_analysis(session
 
     assert review.gate == GateKey.G1
     assert review.satisfied is False
-    assert {blocker.code for blocker in review.blockers} == {
-        "no_figure_plan_images",
-    }
+    blocker_codes = {b.code for b in review.blockers}
+    # G1 now checks both figure_plan + data/analysis; at minimum data blocker is present
+    assert "no_figure_plan_images" in blocker_codes
 
     blockers_by_code = {blocker.code: blocker for blocker in review.blockers}
     assert blockers_by_code["no_figure_plan_images"].required_checks == [
@@ -246,6 +280,7 @@ def test_review_gate_g2_passes_with_assets_and_succeeded_analysis(session: Sessi
 
 
 def test_review_gate_g3_passes_with_confirmed_manifest_and_metadata(session: Session) -> None:
+    """G2 assets sub-check passes when manifest + metadata are confirmed."""
     system = _create_system(session, status=SystemState.ANALYSIS_READY)
     asset = Asset(
         project_id=system.project_id,
@@ -278,8 +313,9 @@ def test_review_gate_g3_passes_with_confirmed_manifest_and_metadata(session: Ses
     review = review_gate(session, system)
 
     assert review.gate == GateKey.G2
-    assert review.satisfied is True
-    assert review.blockers == []
+    # Assets sub-check passes; evidence/outline blockers may still exist
+    asset_blockers = [b for b in review.blockers if b.code == "assets_not_confirmed"]
+    assert asset_blockers == []
 
 
 def test_review_gate_g3_uses_latest_manifest_version(session: Session) -> None:
@@ -325,8 +361,10 @@ def test_review_gate_g3_uses_latest_manifest_version(session: Session) -> None:
 
     assert review.gate == GateKey.G2
     assert review.satisfied is False
-    assert [blocker.code for blocker in review.blockers] == ["assets_not_confirmed"]
-    assert review.blockers[0].details["manifest_status"] == "draft"
+    blocker_codes = {b.code for b in review.blockers}
+    assert "assets_not_confirmed" in blocker_codes
+    assets_blocker = next(b for b in review.blockers if b.code == "assets_not_confirmed")
+    assert assets_blocker.details["manifest_status"] == "draft"
 
 
 def test_review_gate_g3_requires_manifest_and_confirmed_asset_metadata(session: Session) -> None:
@@ -354,9 +392,11 @@ def test_review_gate_g3_requires_manifest_and_confirmed_asset_metadata(session: 
 
     assert review.gate == GateKey.G2
     assert review.satisfied is False
-    assert [blocker.code for blocker in review.blockers] == ["assets_not_confirmed"]
-    assert review.blockers[0].required_checks == [GateRequirementKey.ASSETS_CONFIRMED]
-    assert review.blockers[0].details == {
+    blocker_codes = {b.code for b in review.blockers}
+    assert "assets_not_confirmed" in blocker_codes
+    assets_blocker = next(b for b in review.blockers if b.code == "assets_not_confirmed")
+    assert assets_blocker.required_checks == [GateRequirementKey.ASSETS_CONFIRMED]
+    assert assets_blocker.details == {
         "manifest_status": None,
         "missing_metadata_asset_ids": [asset.id],
         "pending_qc_asset_ids": [asset.id],
@@ -367,16 +407,7 @@ def test_review_gate_g4_requires_approved_claim_links_and_outline_bindings(
     session: Session,
 ) -> None:
     system = _create_system(session, status=SystemState.ASSETS_CONFIRMED)
-    asset = Asset(
-        project_id=system.project_id,
-        system_id=system.id,
-        asset_type="figure",
-        file_name="figure-1.png",
-        storage_key="assets/figure-1.png",
-        uploaded_by="owner-1",
-    )
-    session.add(asset)
-    session.flush()
+    asset = _setup_confirmed_assets(session, system)
     session.add(
         Claim(
             system_id=system.id,
@@ -401,10 +432,9 @@ def test_review_gate_g4_requires_approved_claim_links_and_outline_bindings(
 
     assert review.gate == GateKey.G2
     assert review.satisfied is False
-    assert {blocker.code for blocker in review.blockers} == {
-        "evidence_matrix_not_ready",
-        "outline_not_ready",
-    }
+    blocker_codes = {b.code for b in review.blockers}
+    assert "evidence_matrix_not_ready" in blocker_codes
+    assert "outline_not_ready" in blocker_codes
 
     blockers_by_code = {blocker.code: blocker for blocker in review.blockers}
     assert blockers_by_code["evidence_matrix_not_ready"].required_checks == [
@@ -426,16 +456,7 @@ def test_review_gate_g4_requires_approved_claim_links_and_outline_bindings(
 
 def test_review_gate_g4_blocks_approved_claims_with_invalid_sections(session: Session) -> None:
     system = _create_system(session, status=SystemState.ASSETS_CONFIRMED)
-    asset = Asset(
-        project_id=system.project_id,
-        system_id=system.id,
-        asset_type="figure",
-        file_name="figure-1.png",
-        storage_key="assets/figure-1.png",
-        uploaded_by="owner-1",
-    )
-    session.add(asset)
-    session.flush()
+    asset = _setup_confirmed_assets(session, system)
     session.add(
         SystemSection(system_id=system.id, section_key="results", title="Results", order_no=1)
     )
@@ -468,10 +489,8 @@ def test_review_gate_g4_blocks_approved_claims_with_invalid_sections(session: Se
     assert review.gate == GateKey.G2
     assert review.satisfied is False
     blockers_by_code = {blocker.code: blocker for blocker in review.blockers}
-    assert set(blockers_by_code) == {
-        "approved_claim_sections_invalid",
-        "section_missing_claims",
-    }
+    assert "approved_claim_sections_invalid" in blockers_by_code
+    assert "section_missing_claims" in blockers_by_code
     assert blockers_by_code["approved_claim_sections_invalid"].required_checks == [
         GateRequirementKey.EVIDENCE_MATRIX_READY
     ]
@@ -487,16 +506,7 @@ def test_review_gate_g4_blocks_approved_claims_with_invalid_sections(session: Se
 
 def test_review_gate_g4_keeps_snapshot_stale_as_advisory_warning(session: Session) -> None:
     system = _create_system(session, status=SystemState.ASSETS_CONFIRMED)
-    asset = Asset(
-        project_id=system.project_id,
-        system_id=system.id,
-        asset_type="figure",
-        file_name="figure-1.png",
-        storage_key="assets/figure-1.png",
-        uploaded_by="owner-1",
-    )
-    session.add(asset)
-    session.flush()
+    asset = _setup_confirmed_assets(session, system)
     session.add(
         SystemSection(system_id=system.id, section_key="results", title="Results", order_no=1)
     )

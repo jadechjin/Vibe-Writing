@@ -5,6 +5,7 @@ import type {
   WorkflowEventRecord,
   Blocker,
 } from "../../hooks/useProjectStatus"
+import { resolveBlockerDisplay } from "../../lib/blockerMessages"
 
 // ---- Props ----
 
@@ -98,6 +99,54 @@ const eventTimeStyle: CSSProperties = {
   whiteSpace: "nowrap",
 }
 
+const blockerSectionStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
+  padding: "14px 16px",
+  borderRadius: "14px",
+  border: "1px solid rgba(248, 113, 113, 0.25)",
+  background: "rgba(127, 29, 29, 0.1)",
+}
+
+const blockerTitleStyle: CSSProperties = {
+  fontSize: "12px",
+  fontWeight: 700,
+  color: "#fca5a5",
+}
+
+const blockerCardStyle: CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: "10px",
+  border: "1px solid rgba(248, 113, 113, 0.15)",
+  background: "rgba(15, 23, 42, 0.4)",
+  display: "flex",
+  flexDirection: "column",
+  gap: "4px",
+}
+
+const warningCardStyle: CSSProperties = {
+  ...blockerCardStyle,
+  border: "1px solid rgba(251, 191, 36, 0.15)",
+}
+
+const blockerLabelStyle: CSSProperties = {
+  fontSize: "13px",
+  fontWeight: 600,
+  color: "#fecaca",
+}
+
+const warningLabelStyle: CSSProperties = {
+  ...blockerLabelStyle,
+  color: "#fde68a",
+}
+
+const blockerDetailStyle: CSSProperties = {
+  fontSize: "12px",
+  color: "#94a3b8",
+  lineHeight: 1.5,
+}
+
 // ---- Helpers ----
 
 function formatWorkflowStatus(status: string): string {
@@ -170,6 +219,45 @@ export function WorkflowPanel({
           </div>
         </div>
       ) : null}
+
+      {/* Blockers & Warnings */}
+      {latestBlockers.length > 0 ? (() => {
+        const NON_BLOCKING_CODES = new Set(["snapshot_stale", "section_missing_claims"])
+        const blockers = latestBlockers.filter((b) => !NON_BLOCKING_CODES.has(b.code))
+        const warnings = latestBlockers.filter((b) => NON_BLOCKING_CODES.has(b.code))
+        return (
+          <>
+            {blockers.length > 0 ? (
+              <div style={blockerSectionStyle}>
+                <div style={blockerTitleStyle}>阻塞项（{blockers.length}）</div>
+                {blockers.map((blocker, idx) => {
+                  const display = resolveBlockerDisplay(blocker)
+                  return (
+                    <div key={`${blocker.code}-${idx}`} style={blockerCardStyle}>
+                      <div style={blockerLabelStyle}>{display.label}</div>
+                      <div style={blockerDetailStyle}>{display.detail}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
+            {warnings.length > 0 ? (
+              <div style={{ ...blockerSectionStyle, border: "1px solid rgba(251, 191, 36, 0.2)", background: "rgba(120, 53, 15, 0.08)" }}>
+                <div style={{ ...blockerTitleStyle, color: "#fbbf24" }}>提示（{warnings.length}）</div>
+                {warnings.map((blocker, idx) => {
+                  const display = resolveBlockerDisplay(blocker)
+                  return (
+                    <div key={`${blocker.code}-${idx}`} style={warningCardStyle}>
+                      <div style={warningLabelStyle}>{display.label}</div>
+                      <div style={blockerDetailStyle}>{display.detail}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
+          </>
+        )
+      })() : null}
 
       {/* Last error */}
       {snapshot.lastError ? (

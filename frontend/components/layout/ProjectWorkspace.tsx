@@ -21,6 +21,13 @@ const splitPaneStyle: CSSProperties = {
   minHeight: 0,
 }
 
+const singlePaneStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: "18px",
+  minHeight: 0,
+}
+
 const panelStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -155,16 +162,20 @@ export function ProjectWorkspace({
   workbenchPanel,
   statusTray,
 }: ProjectWorkspaceProps) {
+  const showEvidence = evidencePanel != null
+
   return (
     <div style={workspaceStyle}>
-      <div style={splitPaneStyle}>
-        <WorkspacePanel
-          eyebrow="证据中枢"
-          title="证据中枢"
-          subtitle="固定双栏中的左侧槽位，面向证据矩阵、图表计划与资产上下文。"
-        >
-          {evidencePanel ?? defaultEvidencePanel}
-        </WorkspacePanel>
+      <div style={showEvidence ? splitPaneStyle : singlePaneStyle}>
+        {showEvidence ? (
+          <WorkspacePanel
+            eyebrow="证据中枢"
+            title="证据中枢"
+            subtitle="固定双栏中的左侧槽位，面向证据矩阵、图表计划与资产上下文。"
+          >
+            {evidencePanel}
+          </WorkspacePanel>
+        ) : null}
 
         <WorkspacePanel
           eyebrow="工作台"

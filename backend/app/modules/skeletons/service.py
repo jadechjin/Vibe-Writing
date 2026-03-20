@@ -4,6 +4,7 @@ import asyncio
 import enum
 import json
 import logging
+import re
 import shutil
 import subprocess
 import sys
@@ -52,7 +53,8 @@ logger = logging.getLogger(__name__)
 
 SKELETON_TASK_START_DELAY_SECONDS = 0.05
 CLAUDE_CLI_TIMEOUT_SECONDS = 300
-PROVIDER_RETRY_ATTEMPTS = 2
+# 用户手动关闭 CLI 时，当前轮次应立即失败，不能自动拉起下一轮。
+PROVIDER_RETRY_ATTEMPTS = 1
 PROVIDER_RETRY_DELAY_SECONDS = 2
 
 # Project-level temp directory (inside git repo so Codex CLI works without --skip-git-repo-check)
@@ -475,7 +477,9 @@ The output MUST be valid JSON with this exact schema:
       "type": "chart|diagram|table|image",
       "data_source": "Which analysis method produces this",
       "purpose": "What argument this figure supports",
-      "data_question": "The specific data question this figure must answer (e.g. Is the conversion rate significantly different across temperature conditions?)",
+      "data_question": "The specific data question this figure must answer "
+      "(e.g. Is the conversion rate significantly different across "
+      "temperature conditions?)",
       "importance": "high|medium|low",
       "data_preparation": "What raw data the user needs to prepare for this figure",
       "related_sections": ["section_key_1"],
@@ -528,7 +532,8 @@ Reference documents are located at: {file_dir}
 Files: {file_list}
 
 Analyze these documents and produce a research/writing framework skeleton. \
-所有文本内容必须使用中文输出（包括 title、description、question、hypothesis、rationale、claim、purpose 等字段），\
+所有文本内容必须使用中文输出（包括 \
+title、description、question、hypothesis、rationale、claim、purpose 等字段），\
 仅 key、id、figure_id 等标识符使用英文 snake_case。\
 Output ONLY the JSON, no markdown fences, no explanation.
 """
@@ -557,9 +562,11 @@ remain consistent after changes.\
 Output ONLY the JSON, no markdown fences, no explanation.
 """
 
-
-
-def _build_provider_shell_script(provider: SkeletonProvider, prompt_file: str, output_file: str) -> str:
+def _build_provider_shell_script(
+    provider: SkeletonProvider,
+    prompt_file: str,
+    output_file: str,
+) -> str:
     """Build a PowerShell script that invokes the AI CLI via a meta-prompt.
 
     Instead of piping the full prompt via stdin (ProcessStartInfo), this passes
@@ -569,8 +576,16 @@ def _build_provider_shell_script(provider: SkeletonProvider, prompt_file: str, o
     Writes a sentinel file (_done.txt) on completion so the Python caller can
     poll without blocking on proc.wait().
     """
-    provider_label = {"claude": "Claude Code", "codex": "Codex", "gemini": "Gemini"}[provider.value]
+    provider_label = {
+        "claude": "Claude Code",
+        "codex": "Codex",
+        "gemini": "Gemini",
+    }[provider.value]
     done_file = str(Path(output_file).parent / "_done.txt")
+    meta_prompt = (
+        f"Read the prompt file at '{prompt_file}' and follow ALL instructions in it exactly. "
+        "Output ONLY the raw result as specified in the file, with no extra commentary."
+    )
 
     if provider is SkeletonProvider.CLAUDE:
         invoke = '& claude -p "$metaPrompt" --output-format text'
@@ -588,13 +603,13 @@ def _build_provider_shell_script(provider: SkeletonProvider, prompt_file: str, o
         f'Write-Host "Prompt file: {prompt_file}" -ForegroundColor DarkGray\n'
         f'Write-Host "Output file: {output_file}" -ForegroundColor DarkGray\n'
         f'Write-Host ""\n'
-        f'$metaPrompt = "Read the prompt file at \'{prompt_file}\' and follow ALL instructions in it exactly. Output ONLY the raw result as specified in the file, with no extra commentary."\n'
+        f'$metaPrompt = "{meta_prompt}"\n'
         f'try {{\n'
         f'    Write-Host "Calling {provider_label}..." -ForegroundColor Yellow\n'
         f'    Write-Host ""\n'
-        f'    $output = {invoke} 2>&1 | Out-String\n'
-        f'    Write-Host $output\n'
-        f'    $output | Out-File -FilePath "{output_file}" -Encoding UTF8\n'
+        f'    {invoke} 2>&1 | ForEach-Object {{ '
+        f'$_ | Out-File -FilePath "{output_file}" -Append -Encoding UTF8; $_ '
+        f'}}\n'
         f'}} catch {{\n'
         f'    Write-Host "Error: $_" -ForegroundColor Red\n'
         f'    $_.ToString() | Out-File -FilePath "{output_file}" -Encoding UTF8\n'
@@ -625,9 +640,25 @@ async def _invoke_provider(
     output_file.write_text("", encoding="utf-8")
 
     if sys.platform == "win32":
-        script_content = _build_provider_shell_script(provider, str(prompt_file), str(output_file))
+        script_content = _build_provider_shell_script(
+            provider,
+            str(prompt_file),
+            str(output_file),
+        )
         script_file.write_text(script_content, encoding="utf-8")
         done_file = tmp_dir / "_done.txt"
+
+        def _terminate_wrapper_process(proc: subprocess.Popen[Any]) -> None:
+            try:
+                proc.terminate()
+            except OSError:
+                return
+
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
 
         def _run_in_terminal() -> int:
             proc = subprocess.Popen(
@@ -650,13 +681,26 @@ async def _invoke_provider(
                     # 这样即使用户在 _done.txt 写入前关闭终端，也能继续完成
                     if output_file.exists() and output_file.stat().st_size > 0:
                         logger.info(
-                            "Process exited (rc=%s) but output file exists (%d bytes), treating as success",
+                            "Process exited (rc=%s) but output file exists "
+                            "(%d bytes), treating as success",
                             proc.returncode,
                             output_file.stat().st_size,
                         )
                         return 0
                     return proc.returncode or 1
                 time.sleep(2)
+
+            if output_file.exists() and output_file.stat().st_size > 0:
+                logger.warning(
+                    "%s CLI timed out before sentinel file but streamed %d bytes; "
+                    "terminating wrapper and continuing with captured output",
+                    provider.value,
+                    output_file.stat().st_size,
+                )
+                _terminate_wrapper_process(proc)
+                return 0
+
+            _terminate_wrapper_process(proc)
             raise subprocess.TimeoutExpired(
                 cmd="powershell", timeout=CLAUDE_CLI_TIMEOUT_SECONDS,
             )
@@ -723,7 +767,12 @@ async def _invoke_provider(
             continue
 
         if not stdout_text:
-            logger.warning("%s CLI returned empty stdout on attempt %d/%d", provider.value, attempt, PROVIDER_RETRY_ATTEMPTS)
+            logger.warning(
+                "%s CLI returned empty stdout on attempt %d/%d",
+                provider.value,
+                attempt,
+                PROVIDER_RETRY_ATTEMPTS,
+            )
             last_error = AppException(
                 code=ErrorCode.WORKFLOW_ERROR.value,
                 message=f"{provider.value} CLI returned empty output",
@@ -759,15 +808,34 @@ def _build_provider_command_list(provider: SkeletonProvider, prompt: str) -> lis
 
 
 def _parse_skeleton_json(raw: str) -> dict[str, Any]:
-    """Extract JSON from provider output, tolerating markdown fences."""
+    """Extract JSON from provider output, tolerating markdown fences and preamble text."""
     logger.info("Parsing skeleton JSON (raw length=%d)", len(raw))
     text = raw.strip().lstrip("\ufeff")  # strip BOM from PowerShell UTF8 output
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = lines[1:]  # drop opening fence
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
+
+    # 1) Strip markdown fences (```json ... ``` or ``` ... ```)
+    if "```" in text:
+        fence_match = re.search(r"```(?:json)?\s*\n(.*?)```", text, re.DOTALL)
+        if fence_match:
+            text = fence_match.group(1).strip()
+
+    # 2) If still not valid JSON, extract the outermost { ... } block
+    if text and not text.startswith("{"):
+        brace_start = text.find("{")
+        if brace_start != -1:
+            # Find matching closing brace by counting nesting
+            depth = 0
+            brace_end = -1
+            for i in range(brace_start, len(text)):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        brace_end = i
+                        break
+            if brace_end != -1:
+                text = text[brace_start:brace_end + 1]
+
     if not text:
         raise AppException(
             code=ErrorCode.WORKFLOW_ERROR.value,

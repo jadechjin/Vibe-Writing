@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from inspect import isawaitable
 from io import SEEK_END
 from pathlib import Path
-from shutil import copyfileobj
+from shutil import copyfileobj, move as shutil_move
 from typing import Any, BinaryIO, TypeVar
 from uuid import uuid4
 
@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.common.enums import EventType, GateKey, TaskStatus
 from app.common.errors import ErrorCode
 from app.common.events import TaskEvent
-from app.common.storage import generate_presigned_url, upload_fileobj
+from app.common.storage import download_asset_to_temp, generate_presigned_url, upload_fileobj
 from app.core.config import get_settings
 from app.core.exceptions import AppException
 from app.modules.assets.schemas import (
@@ -2056,7 +2056,13 @@ async def send_chat_message_stream(
     chat_session = await _get_or_create_chat_session(session, plan_id, provider_value, scope)
 
     if await repository.is_chat_session_busy(session, chat_session.id):
-        raise _build_chat_conflict(plan_id, provider_value, scope)
+        # Session has a streaming message. The stale-timeout check inside
+        # is_chat_session_busy already cleared truly old ones. If we still
+        # get busy here, force-clear it — the user explicitly wants to send
+        # a new message, which means the previous SSE stream is gone.
+        cleared = await repository.force_clear_stale_streaming(session, chat_session.id)
+        if not cleared:
+            raise _build_chat_conflict(plan_id, provider_value, scope)
 
     try:
         turn_index = await repository.get_next_turn_index(session, chat_session.id)
@@ -2087,6 +2093,7 @@ async def send_chat_message_stream(
     async def _stream() -> AsyncGenerator[str, None]:
         collected_text: list[str] = []
         extracted_session_id: str | None = None
+        finished = False
 
         def _persist_session_id() -> None:
             """Write provider_session_id to the chat session if changed."""
@@ -2114,6 +2121,7 @@ async def send_chat_message_stream(
             _persist_session_id()
             chat_session.last_message_at = datetime.now(UTC)
             await _maybe_await(session.commit())
+            finished = True
             yield f"data: {_json_event('done', '')}\n\n"
         except AppException as exc:
             user_message = _translate_provider_error(exc, provider)
@@ -2123,6 +2131,7 @@ async def send_chat_message_stream(
             assistant_msg.error_text = user_message
             _persist_session_id()
             await _maybe_await(session.commit())
+            finished = True
             yield f"data: {_json_event('error', user_message)}\n\n"
         except Exception as exc:
             logger.exception("Chat stream error: %s", exc)
@@ -2131,7 +2140,24 @@ async def send_chat_message_stream(
             assistant_msg.error_text = str(exc)
             _persist_session_id()
             await _maybe_await(session.commit())
+            finished = True
             yield f"data: {_json_event('error', str(exc))}\n\n"
+        finally:
+            if not finished:
+                # Client disconnected mid-stream (GeneratorExit / cancellation).
+                # Save whatever text was collected and mark as completed so the
+                # session is no longer "busy".
+                logger.info("Chat stream interrupted (client disconnect) for plan %s", plan_id)
+                try:
+                    assistant_msg.content = "".join(collected_text)
+                    assistant_msg.status = "completed" if collected_text else "failed"
+                    if not collected_text:
+                        assistant_msg.error_text = "客户端连接中断"
+                    _persist_session_id()
+                    chat_session.last_message_at = datetime.now(UTC)
+                    await _maybe_await(session.commit())
+                except Exception:
+                    logger.warning("Failed to finalize interrupted chat message", exc_info=True)
 
     return _stream()
 
@@ -2184,6 +2210,28 @@ def _build_chat_conflict(plan_id: str, provider: str, scope: str = "planning") -
     )
 
 
+def _get_asset_cache_dir(plan_id: str) -> Path:
+    """Return a persistent cache directory for downloaded plan assets."""
+    return _resolve_upload_dir() / "ai-cache" / plan_id
+
+
+def _ensure_asset_cached(plan_id: str, asset_id: str, storage_key: str, file_name: str) -> Path | None:
+    """Download asset to local cache if not already present. Returns local path or None."""
+    cache_dir = _get_asset_cache_dir(plan_id)
+    suffix = Path(file_name).suffix
+    cached_path = cache_dir / f"{asset_id}{suffix}"
+    if cached_path.exists():
+        return cached_path
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        tmp = download_asset_to_temp(storage_key, suffix=suffix)
+        shutil_move(str(tmp), str(cached_path))
+        return cached_path
+    except Exception:
+        logger.warning("Failed to cache asset %s for plan %s", asset_id, plan_id, exc_info=True)
+        return None
+
+
 async def _build_context_prompt(session: SessionLike, plan_id: str) -> str:
     plan = await repository.get_figure_plan(session, plan_id)
     if plan is None:
@@ -2214,12 +2262,18 @@ async def _build_context_prompt(session: SessionLike, plan_id: str) -> str:
 
     if assets:
         context_parts.append("")
-        context_parts.append("## Uploaded Images:")
+        context_parts.append("## Uploaded Images (local paths for AI access):")
         for binding, asset in assets:
-            uploaded_at = binding.created_at.isoformat() if binding.created_at else "unknown"
-            context_parts.append(
-                f"- {asset.file_name} (uploaded at {uploaded_at})"
-            )
+            cached = _ensure_asset_cached(plan_id, asset.id, asset.storage_key, asset.file_name)
+            if cached:
+                context_parts.append(
+                    f"- {asset.file_name}: {cached}"
+                )
+            else:
+                uploaded_at = binding.created_at.isoformat() if binding.created_at else "unknown"
+                context_parts.append(
+                    f"- {asset.file_name} (uploaded at {uploaded_at}, local cache unavailable)"
+                )
 
     local_chat_images = _list_local_chat_images(plan_id)
     if local_chat_images:

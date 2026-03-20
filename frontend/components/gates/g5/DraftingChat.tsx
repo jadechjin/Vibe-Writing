@@ -61,9 +61,38 @@ const sendBtnStyle: CSSProperties = {
   cursor: "pointer",
 }
 
+const errorBannerStyle: CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: "8px",
+  background: "rgba(239,68,68,0.1)",
+  border: "1px solid rgba(239,68,68,0.25)",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "8px",
+}
+
+const errorTextStyle: CSSProperties = {
+  fontSize: "12px",
+  color: "#fca5a5",
+  lineHeight: 1.5,
+  flex: 1,
+}
+
+const errorDismissStyle: CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "#94a3b8",
+  cursor: "pointer",
+  fontSize: "16px",
+  padding: "0 2px",
+  lineHeight: 1,
+  flexShrink: 0,
+}
+
 export function DraftingChat({ systemId, sectionKey, onDraftReady }: DraftingChatProps) {
   const { data: history } = useDraftChatMessages(systemId, sectionKey)
-  const { send, streaming, streamContent, skillAssets, skillReview, skillRevisions } = useSendDraftChatStream(systemId, sectionKey)
+  const { send, streaming, streamContent, streamError, clearError, skillAssets, skillReview, skillRevisions } = useSendDraftChatStream(systemId, sectionKey)
   const [input, setInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -107,6 +136,15 @@ export function DraftingChat({ systemId, sectionKey, onDraftReady }: DraftingCha
           </div>
         ))}
       </div>
+
+      {/* Error banner */}
+      {streamError ? (
+        <div style={errorBannerStyle}>
+          <div style={errorTextStyle}>{streamError}</div>
+          <button type="button" style={errorDismissStyle} onClick={clearError}>&times;</button>
+        </div>
+      ) : null}
+
       {/* Skill structured output panels */}
       {(skillAssets.length > 0 || skillReview.length > 0 || skillRevisions.length > 0) && (
         <div style={{ padding: "6px 8px", fontSize: "12px", display: "flex", flexDirection: "column", gap: "4px" }}>

@@ -235,6 +235,8 @@ export default function GenerationPanel({ systemId, onComplete, onCancel }: Gene
   const [elapsedTime, setElapsedTime] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [workflowId, setWorkflowId] = useState<string | null>(null)
+  const [skeletonCountAtStart, setSkeletonCountAtStart] = useState<number | null>(null)
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null)
 
   const buildPromptMut = useBuildPrompt(systemId)
   const generateMut = useGenerateSkeleton(systemId)
@@ -242,13 +244,23 @@ export default function GenerationPanel({ systemId, onComplete, onCancel }: Gene
   const { data: skeletons } = useSkeletons(systemId)
   const { events } = useWebSocket({ systemId })
 
+  function isEventFromCurrentRun(event: { timestamp: string }) {
+    if (runStartedAt === null) return false
+    const eventTime = Date.parse(event.timestamp)
+    return Number.isFinite(eventTime) && eventTime >= runStartedAt
+  }
+
   // 阶段 1 修复：WebSocket 事件回放
   // 处理事件先到、workflowId 后绑定的时序竞争问题
   useEffect(() => {
-    if (!workflowId || step !== "running") return
+    if (step !== "running" || runStartedAt === null) return
 
     // 回放历史事件，查找是否已有完成事件
-    const history = events.filter((e) => e.workflowId === workflowId)
+    // workflowId 未设置时，只接受本轮开始之后的同 system 事件
+    const history = workflowId
+      ? events.filter((e) => e.workflowId === workflowId && isEventFromCurrentRun(e))
+      : events.filter((e) => isEventFromCurrentRun(e))
+
     const completed = history.find(
       (e) => e.type === "task.succeeded" && e.status === "succeeded"
     )
@@ -269,12 +281,14 @@ export default function GenerationPanel({ systemId, onComplete, onCancel }: Gene
       setErrorMessage(failed.message || "生成任务失败，请查看后端日志")
       setStep("error")
     }
-  }, [workflowId, events, step, queryClient, systemId])
+  }, [workflowId, events, step, queryClient, systemId, runStartedAt])
 
   // Listen to WebSocket events for real-time updates
   useWebSocket({
     systemId,
     onInvalidate: (event) => {
+      if (step !== "running" || runStartedAt === null) return
+
       console.log("[GenerationPanel] Received WebSocket event:", {
         type: event.type,
         status: event.status,
@@ -283,15 +297,16 @@ export default function GenerationPanel({ systemId, onComplete, onCancel }: Gene
         message: event.message,
       })
 
-      // Only handle events for the current workflow
-      if (workflowId && event.workflowId === workflowId) {
+      // 修复时序竞争：workflowId 可能还未设置（mutation onSuccess 尚未触发）
+      // 当 workflowId 未设置时，也必须限定为“本轮开始之后”的事件
+      const isMatch = (!workflowId || event.workflowId === workflowId) && isEventFromCurrentRun(event)
+
+      if (isMatch) {
         if (event.type === "task.succeeded" && event.status === "succeeded") {
-          // Skeleton generation completed
           console.log("[GenerationPanel] Skeleton generation succeeded, stopping timer")
           queryClient.invalidateQueries({ queryKey: ["skeletons", systemId] })
           setStep("result")
         } else if (event.type === "task.failed" && event.status === "failed") {
-          // Skeleton generation failed
           console.log("[GenerationPanel] Skeleton generation failed:", event.message)
           setErrorMessage(event.message || "生成任务失败，请查看后端日志")
           setStep("error")
@@ -323,15 +338,14 @@ export default function GenerationPanel({ systemId, onComplete, onCancel }: Gene
 
   // 检测 skeletons 数据变化，判断是否生成完成
   useEffect(() => {
-    if (step !== "running" || !skeletons || skeletons.length === 0) return
+    if (step !== "running" || !skeletons || skeletonCountAtStart === null) return
 
-    // 如果有新的 draft 状态骨架，说明生成完成
-    const latestSkeleton = skeletons[skeletons.length - 1]
-    if (latestSkeleton && latestSkeleton.status === "draft") {
-      console.log("[GenerationPanel] Detected new skeleton via polling, stopping timer")
+    // 对比生成前后的数量变化，而非仅检查最后一个 skeleton 的 status
+    if (skeletons.length > skeletonCountAtStart) {
+      console.log("[GenerationPanel] Detected new skeleton via polling (count %d -> %d), stopping timer", skeletonCountAtStart, skeletons.length)
       setStep("result")
     }
-  }, [skeletons, step])
+  }, [skeletons, step, skeletonCountAtStart])
 
   // Timer for running step
   useEffect(() => {
@@ -358,6 +372,9 @@ export default function GenerationPanel({ systemId, onComplete, onCancel }: Gene
   }
 
   function handleConfirmPrompt() {
+    const startedAt = Date.now()
+    setSkeletonCountAtStart(skeletons?.length ?? 0)
+    setRunStartedAt(startedAt)
     setStep("running")
     setElapsedTime(0)
 
@@ -382,6 +399,10 @@ export default function GenerationPanel({ systemId, onComplete, onCancel }: Gene
     setStep("setup")
     setErrorMessage(null)
     setPromptText("")
+    setWorkflowId(null)
+    setSkeletonCountAtStart(null)
+    setRunStartedAt(null)
+    setElapsedTime(0)
   }
 
   const stepIdx = STEPS.findIndex((s) => s.key === step)

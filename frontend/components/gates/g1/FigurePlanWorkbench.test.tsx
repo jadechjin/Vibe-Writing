@@ -11,6 +11,7 @@ vi.mock("../../../hooks/useFigurePlan", async () => {
   const actual = await vi.importActual<typeof import("../../../hooks/useFigurePlan")>("../../../hooks/useFigurePlan")
   return {
     ...actual,
+    useConfirmFigurePlan: vi.fn(),
     usePatchFigurePlan: vi.fn(),
     useDeleteFigurePlan: vi.fn(),
   }
@@ -24,6 +25,7 @@ vi.mock("../../../hooks/useSkeletons", async () => {
   }
 })
 
+const mockedUseConfirmFigurePlan = vi.mocked(figurePlanHooks.useConfirmFigurePlan)
 const mockedUsePatchFigurePlan = vi.mocked(figurePlanHooks.usePatchFigurePlan)
 const mockedUseDeleteFigurePlan = vi.mocked(figurePlanHooks.useDeleteFigurePlan)
 const mockedUseSkeleton = vi.mocked(skeletonHooks.useSkeleton)
@@ -76,6 +78,9 @@ describe("FigurePlanWorkbench smoke coverage", () => {
     mockedUseSkeleton.mockReturnValue(
       createQueryHookResult(buildSkeletonDetail()) as unknown as ReturnType<typeof skeletonHooks.useSkeleton>,
     )
+    mockedUseConfirmFigurePlan.mockReturnValue(
+      createMutationHookResult() as unknown as ReturnType<typeof figurePlanHooks.useConfirmFigurePlan>,
+    )
     mockedUsePatchFigurePlan.mockReturnValue(
       createMutationHookResult() as unknown as ReturnType<typeof figurePlanHooks.usePatchFigurePlan>,
     )
@@ -84,7 +89,7 @@ describe("FigurePlanWorkbench smoke coverage", () => {
     )
   })
 
-  it("filters plans by figure_framework ids and groups unlinked plans", () => {
+  it("renders the unified plan list and filters unlinked plans", () => {
     mockedUseSkeleton.mockReturnValue(
       createQueryHookResult(
         buildSkeletonDetail({
@@ -111,18 +116,17 @@ describe("FigurePlanWorkbench smoke coverage", () => {
         ]}
       />,
     )
-    expect(screen.getByText("Fig1: Primary figure (1)")).toBeInTheDocument()
-    expect(screen.getByText("Fig2: Backup figure (1)")).toBeInTheDocument()
-    expect(screen.getByText("未关联 (1)")).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText("Fig2: Backup figure (1)"))
+    expect(screen.getByRole("button", { name: "全部 (3)" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "未关联 (1)" })).toBeInTheDocument()
+    expect(screen.getAllByText("Fig1: Primary figure").length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText("Fig2: Backup figure").length).toBeGreaterThanOrEqual(1)
 
-    fireEvent.click(screen.getByText("未关联 (1)"))
+    fireEvent.click(screen.getByRole("button", { name: "未关联 (1)" }))
     expect(screen.getAllByText("Unknown: Unlinked figure").length).toBeGreaterThanOrEqual(1)
   })
 
-  it("enters edit mode and saves the updated figure plan draft", () => {
+  it("opens the editor overlay and saves the updated figure plan draft", () => {
     const patchMutate = vi.fn((_variables, callbacks) => {
       callbacks?.onSuccess?.()
       callbacks?.onSettled?.()
@@ -141,7 +145,9 @@ describe("FigurePlanWorkbench smoke coverage", () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit Figure Plan" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open Figure Plan Editor" }))
+
+    expect(screen.getByRole("dialog", { name: "编辑图表规划" })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText("Figure No"), { target: { value: "Fig1A" } })
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Updated figure" } })
     fireEvent.change(screen.getByLabelText("Claim Text"), { target: { value: "Updated claim" } })
@@ -163,6 +169,7 @@ describe("FigurePlanWorkbench smoke coverage", () => {
       },
       expect.any(Object),
     )
+    expect(screen.queryByRole("dialog", { name: "编辑图表规划" })).not.toBeInTheDocument()
   })
 
   it("deletes the selected plan and falls back to the next visible plan", () => {

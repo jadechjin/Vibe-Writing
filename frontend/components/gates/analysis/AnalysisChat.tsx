@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 
 import {
   useChatMessages,
+  useFigurePlanAssets,
   sendChatMessageStream,
 } from "../../../hooks/useFigurePlanAssets"
 import { useQueryClient } from "@tanstack/react-query"
@@ -230,7 +231,12 @@ export function AnalysisChat({ planId, onAnalysisComplete }: AnalysisChatProps) 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
 
+  const { data: planAssets } = useFigurePlanAssets(planId)
   const { data: serverMessages } = useChatMessages(planId, provider, "analysis")
+
+  const libraryImageCount = planAssets?.length ?? 0
+  const chatImageCount = pendingImages.filter((img) => img.localPath && !img.error).length
+  const totalAccessibleImages = libraryImageCount + chatImageCount
 
   const displayMessages: LocalMessage[] = [
     ...(serverMessages ?? []).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
@@ -311,22 +317,27 @@ export function AnalysisChat({ planId, onAnalysisComplete }: AnalysisChatProps) 
       try {
         const asset = JSON.parse(assetData) as { previewUrl?: string; localPath?: string; fileName?: string }
         if (asset.previewUrl) {
-          // Fetch the image from previewUrl and upload it to get a local path
+          // Fetch the image from previewUrl and re-upload to get a local path
           fetch(asset.previewUrl)
-            .then((res) => res.blob())
+            .then((res) => {
+              if (!res.ok) throw new Error(`Fetch failed: ${res.status}`)
+              return res.blob()
+            })
             .then((blob) => {
               const file = new File([blob], asset.fileName || "image.png", { type: blob.type })
               addImages([file])
             })
             .catch(() => {
-              // Fallback: add as pending with previewUrl only
+              // Fallback: still try to upload a placeholder so backend creates a local copy
+              // Mark as error so user knows the drag didn't fully succeed
+              const imgId = nextImgId()
               setPendingImages((prev) => [...prev, {
-                id: nextImgId(),
+                id: imgId,
                 file: new File([], asset.fileName || "image.png"),
                 blobUrl: asset.previewUrl!,
-                localPath: asset.localPath || null,
+                localPath: null,
                 uploading: false,
-                error: null,
+                error: "图片预览链接已失效，请重新上传图片文件",
               }])
             })
           return
@@ -417,6 +428,12 @@ export function AnalysisChat({ planId, onAnalysisComplete }: AnalysisChatProps) 
         <div style={{ fontSize: "11px", color: "#fb923c", padding: "4px 8px", borderRadius: "6px",
           background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.15)" }}>
           Codex 不支持 MCP 工具调用，学术搜索和知识库检索功能将不可用。
+        </div>
+      ) : null}
+
+      {totalAccessibleImages > 0 ? (
+        <div style={{ fontSize: "10px", color: "#64748b", padding: "2px 8px" }}>
+          AI 可访问 {libraryImageCount} 张素材图片{chatImageCount > 0 ? ` + ${chatImageCount} 张对话图片` : ""}
         </div>
       ) : null}
 

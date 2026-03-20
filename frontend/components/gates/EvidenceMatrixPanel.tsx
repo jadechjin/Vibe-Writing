@@ -48,15 +48,6 @@ export type GateContentPanelProps = Readonly<{
 
 const actionRowStyle: CSSProperties = { display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }
 const errorTextStyle: CSSProperties = { marginTop: "8px", fontSize: "12px", color: "#fca5a5" }
-const blockerListStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }
-const blockerItemStyle: CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: "8px",
-  border: "1px solid rgba(248, 113, 113, 0.2)",
-  background: "rgba(127, 29, 29, 0.1)",
-  fontSize: "12px",
-  color: "#fca5a5",
-}
 const readinessListStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: "8px", marginTop: "10px" }
 const readinessRowStyle: CSSProperties = {
   display: "flex",
@@ -537,18 +528,6 @@ export function EvidenceMatrixPanel({
           confirmOutlineHint={confirmOutlineHint}
         />
       </div>
-
-      {blockers.length > 0 ? (
-        <SectionCard title={<span style={{ fontSize: "13px", color: "#fca5a5" }}>阻塞项 ({blockers.length})</span>}>
-          <div style={blockerListStyle}>
-            {blockers.map((blocker, index) => (
-              <div key={`${blocker.code}-${index}`} style={blockerItemStyle}>
-                <strong>{blocker.code}</strong>: {blocker.message}
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-      ) : null}
     </div>
   )
 }

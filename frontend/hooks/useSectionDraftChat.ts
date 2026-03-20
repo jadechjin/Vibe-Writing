@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { apiRequest } from "../lib/api"
 import type { DraftChatMessageDetail, DraftContextPack } from "../types/g5"
@@ -47,6 +47,7 @@ export function useSendDraftChatStream(
   const queryClient = useQueryClient()
   const [streaming, setStreaming] = useState(false)
   const [streamContent, setStreamContent] = useState("")
+  const [streamError, setStreamError] = useState<string | null>(null)
   const [skillAssets, setSkillAssets] = useState<unknown[]>([])
   const [skillReview, setSkillReview] = useState<unknown[]>([])
   const [skillRevisions, setSkillRevisions] = useState<unknown[]>([])
@@ -56,6 +57,7 @@ export function useSendDraftChatStream(
     async (content: string, provider = "claude") => {
       setStreaming(true)
       setStreamContent("")
+      setStreamError(null)
       setSkillAssets([])
       setSkillReview([])
       setSkillRevisions([])
@@ -74,7 +76,19 @@ export function useSendDraftChatStream(
           signal: controller.signal,
         })
 
-        if (!resp.ok || !resp.body) {
+        if (!resp.ok) {
+          let detail = `HTTP ${resp.status}`
+          try {
+            const body = await resp.json()
+            detail = body?.detail?.message ?? body?.message ?? detail
+          } catch { /* use status code */ }
+          setStreamError(detail)
+          setStreaming(false)
+          return
+        }
+
+        if (!resp.body) {
+          setStreamError("响应体为空")
           setStreaming(false)
           return
         }
@@ -94,6 +108,8 @@ export function useSendDraftChatStream(
               if (evt.type === "delta") {
                 accumulated += evt.content
                 setStreamContent(accumulated)
+              } else if (evt.type === "error") {
+                setStreamError(evt.content || "AI 生成失败")
               } else if (evt.type === "skill_assets") {
                 try { setSkillAssets(JSON.parse(evt.content)) } catch { /* skip */ }
               } else if (evt.type === "skill_review") {
@@ -105,6 +121,10 @@ export function useSendDraftChatStream(
               // ignore parse errors
             }
           }
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name !== "AbortError") {
+          setStreamError(err.message)
         }
       } finally {
         setStreaming(false)
@@ -121,5 +141,9 @@ export function useSendDraftChatStream(
     abortRef.current?.abort()
   }, [])
 
-  return { send, abort, streaming, streamContent, skillAssets, skillReview, skillRevisions }
+  const clearError = useCallback(() => {
+    setStreamError(null)
+  }, [])
+
+  return { send, abort, streaming, streamContent, streamError, clearError, skillAssets, skillReview, skillRevisions }
 }
