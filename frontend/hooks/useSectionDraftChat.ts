@@ -65,7 +65,7 @@ export function useSendDraftChatStream(
       abortRef.current = controller
 
       const baseUrl =
-        process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api"
+        process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api"
       const url = `${baseUrl}/systems/${systemId}/sections/${sectionKey}/draft/chat`
 
       try {

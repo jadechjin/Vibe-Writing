@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api"
 
 export type ApiResponse<T> = {
   success: boolean
@@ -52,7 +52,10 @@ function extractApiErrorPayload(data: unknown): ApiErrorPayload {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const url = new URL(`${API_BASE_URL}${path}`)
+  const fullPath = `${API_BASE_URL}${path}`
+  const url = fullPath.startsWith("http")
+    ? new URL(fullPath)
+    : new URL(fullPath, window.location.origin)
 
   if (options.query) {
     Object.entries(options.query).forEach(([key, value]) => {
