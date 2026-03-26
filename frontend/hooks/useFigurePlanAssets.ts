@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiRequest } from "../lib/api"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api"
+const STREAMING_API_BASE_URL = process.env.NEXT_PUBLIC_STREAMING_API_URL ?? API_BASE_URL
 
 // ---------------------------------------------------------------------------
 // Types
@@ -119,7 +120,7 @@ export async function sendChatMessageStream(
   signal?: AbortSignal,
   scope: string = "planning",
 ): Promise<void> {
-  const url = `${API_BASE_URL}/figure-plans/${planId}/chat/messages`
+  const url = `${STREAMING_API_BASE_URL}/figure-plans/${planId}/chat/messages`
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

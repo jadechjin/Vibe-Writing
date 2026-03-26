@@ -3,6 +3,7 @@
 import pytest
 
 from app.modules.evidence.chat_provider import (
+    _FALLBACK_SENTINEL,
     _parse_claude_stream_event,
     _parse_codex_stream_line,
     _parse_gemini_stream_event,
@@ -12,8 +13,34 @@ from app.modules.evidence.chat_provider import (
 class TestClaudeParser:
     """Test Claude Code CLI stream-json parser."""
 
+    def test_stream_event_text_delta(self):
+        """Test parsing stream_event with content_block_delta (primary streaming path)."""
+        line = '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}}'
+        text, session_id = _parse_claude_stream_event(line)
+        assert text == "Hello"
+        assert session_id is None
+
+    def test_stream_event_message_start(self):
+        """Test that non-delta stream_events return None."""
+        line = '{"type":"stream_event","event":{"type":"message_start","message":{}}}'
+        text, session_id = _parse_claude_stream_event(line)
+        assert text is None
+
+    def test_stream_event_content_block_stop(self):
+        """Test that content_block_stop returns None."""
+        line = '{"type":"stream_event","event":{"type":"content_block_stop","index":0}}'
+        text, session_id = _parse_claude_stream_event(line)
+        assert text is None
+
+    def test_stream_event_with_session_id(self):
+        """Test session_id extraction from stream_event."""
+        line = '{"type":"stream_event","session_id":"ses123","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}}'
+        text, session_id = _parse_claude_stream_event(line)
+        assert text == "Hi"
+        assert session_id == "ses123"
+
     def test_content_block_delta(self):
-        """Test parsing content_block_delta event."""
+        """Test parsing raw (non-wrapped) content_block_delta event."""
         line = '{"type":"content_block_delta","delta":{"text":"Hello"}}'
         text, session_id = _parse_claude_stream_event(line)
         assert text == "Hello"
@@ -26,11 +53,17 @@ class TestClaudeParser:
         assert text == "World"
         assert session_id is None
 
-    def test_result_event(self):
-        """Test parsing result event."""
+    def test_assistant_event_returns_fallback(self):
+        """Test that assistant event returns fallback sentinel (not full text)."""
+        line = '{"type":"assistant","message":{"content":[{"type":"text","text":"Full response"}]}}'
+        text, session_id = _parse_claude_stream_event(line)
+        assert text == _FALLBACK_SENTINEL
+
+    def test_result_event_returns_fallback(self):
+        """Test that result event returns fallback sentinel."""
         line = '{"type":"result","result":"Done"}'
         text, session_id = _parse_claude_stream_event(line)
-        assert text == "Done"
+        assert text == _FALLBACK_SENTINEL
         assert session_id is None
 
     def test_session_id_extraction(self):

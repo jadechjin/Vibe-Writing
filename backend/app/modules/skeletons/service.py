@@ -594,6 +594,7 @@ def _build_provider_shell_script(
     else:
         invoke = '& gemini -p "$metaPrompt" -o text'
 
+    stderr_file = str(Path(output_file).parent / "_stderr.txt")
     return (
         f'$Host.UI.RawUI.WindowTitle = "AI Generation - {provider_label}"\n'
         f'Write-Host "========================================" -ForegroundColor Cyan\n'
@@ -607,12 +608,19 @@ def _build_provider_shell_script(
         f'try {{\n'
         f'    Write-Host "Calling {provider_label}..." -ForegroundColor Yellow\n'
         f'    Write-Host ""\n'
-        f'    {invoke} 2>&1 | ForEach-Object {{ '
+        f'    {invoke} 2>"{stderr_file}" | ForEach-Object {{ '
         f'$_ | Out-File -FilePath "{output_file}" -Append -Encoding UTF8; $_ '
         f'}}\n'
         f'}} catch {{\n'
         f'    Write-Host "Error: $_" -ForegroundColor Red\n'
         f'    $_.ToString() | Out-File -FilePath "{output_file}" -Encoding UTF8\n'
+        f'}}\n'
+        f'if (Test-Path "{stderr_file}") {{\n'
+        f'    $stderrContent = Get-Content "{stderr_file}" -Raw -ErrorAction SilentlyContinue\n'
+        f'    if ($stderrContent) {{\n'
+        f'        Write-Host "CLI warnings (non-fatal):" -ForegroundColor DarkYellow\n'
+        f'        Write-Host $stderrContent -ForegroundColor DarkGray\n'
+        f'    }}\n'
         f'}}\n'
         f'"done" | Out-File -FilePath "{done_file}" -Encoding UTF8\n'
         f'Write-Host ""\n'

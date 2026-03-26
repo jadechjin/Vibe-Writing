@@ -15,7 +15,9 @@ type FigurePlanUploadProps = Readonly<{
 const dropZoneBase: CSSProperties = {
   padding: "16px",
   borderRadius: "10px",
-  border: "1px dashed rgba(148,163,184,0.25)",
+  borderWidth: "1px",
+  borderStyle: "dashed",
+  borderColor: "rgba(148,163,184,0.25)",
   textAlign: "center",
   cursor: "pointer",
   transition: "border-color 0.2s, background 0.2s",

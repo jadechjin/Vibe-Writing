@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 CHAT_CLI_TIMEOUT_SECONDS = 300
 BRIDGE_QUEUE_MAX_SIZE = 1000  # Prevent unbounded memory growth
+_FALLBACK_SENTINEL = "__FALLBACK__"  # Marks assistant/result as fallback-only
 
 # Session ID extraction patterns (used by all parsers)
 _SESSION_ID_PATTERNS = [
@@ -122,32 +123,51 @@ def _parse_claude_stream_event(line: str) -> tuple[str | None, str | None]:
     elif "sessionId" in obj:
         session_id = obj["sessionId"]
 
-    # Claude Code CLI stream-json events
-    # {"type":"content_block_delta","delta":{"text":"..."}}
+    # PRIMARY: Claude Code CLI stream-json wraps raw API events as:
+    # {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}}
+    if event_type == "stream_event":
+        event = obj.get("event", {})
+        inner_type = event.get("type")
+        if inner_type == "content_block_delta":
+            delta = event.get("delta", {})
+            if delta.get("type") == "text_delta":
+                return delta.get("text"), session_id
+        # Other stream_event subtypes (message_start, content_block_start/stop,
+        # message_delta, message_stop) carry no renderable text — skip them.
+        return None, session_id
+
+    # FALLBACK: accumulated assistant message (only used when no stream_event deltas)
+    # {"type":"assistant","message":{"content":[{"type":"text","text":"..."}],...}}
+    if event_type == "assistant":
+        return _FALLBACK_SENTINEL, session_id
+
+    # FALLBACK: final result (only used when no stream_event deltas)
+    # {"type":"result","result":"..."}
+    if event_type == "result":
+        result_text = obj.get("result")
+        if isinstance(result_text, str) and result_text.strip():
+            return _FALLBACK_SENTINEL, session_id
+        return None, session_id
+
+    # Raw API passthrough (non-wrapped): {"type":"content_block_delta","delta":{"text":"..."}}
     if event_type == "content_block_delta":
         delta = obj.get("delta", {})
         return delta.get("text"), session_id
 
-    # {"type":"message","role":"assistant","content":"..."}
+    # Legacy: {"type":"message","role":"assistant","content":"..."}
     if event_type == "message":
         role = obj.get("role")
-        # Only extract content from assistant messages, or if role is not specified
         if role == "assistant" or role is None:
             content = obj.get("content", "")
             if isinstance(content, str):
                 return content, session_id
-            # Content might be a list of content blocks
             if isinstance(content, list) and content:
                 text_parts = [
                     block.get("text", "")
                     for block in content
-                    if block.get("type") == "text"
+                    if isinstance(block, dict) and block.get("type") == "text"
                 ]
                 return "".join(text_parts) if text_parts else None, session_id
-
-    # {"type":"result","result":"..."}
-    if event_type == "result":
-        return obj.get("result"), session_id
 
     return None, session_id
 
@@ -243,8 +263,24 @@ def _extract_text_from_stream_json(line: str) -> str | None:
     event_type = obj.get("type", "unknown")
     logger.debug("Parsed JSON event: type=%s keys=%s", event_type, list(obj.keys()))
 
+    # PRIMARY: Claude Code CLI stream-json wrapped events
+    if event_type == "stream_event":
+        event = obj.get("event", {})
+        if event.get("type") == "content_block_delta":
+            delta = event.get("delta", {})
+            if delta.get("type") == "text_delta":
+                text = delta.get("text")
+                if text:
+                    logger.debug("Extracted from stream_event delta: %s", text[:50])
+                return text
+        return None
+
+    # Claude Code CLI stream-json: {"type":"assistant",...} — skip to avoid duplication
+    if event_type == "assistant":
+        return None
+
     # Claude stream-json: {"type":"content_block_delta","delta":{"text":"..."}}
-    if obj.get("type") == "content_block_delta":
+    if event_type == "content_block_delta":
         delta = obj.get("delta", {})
         text = delta.get("text")
         if text:
@@ -252,7 +288,7 @@ def _extract_text_from_stream_json(line: str) -> str | None:
         return text
 
     # Claude stream-json: {"type":"result","result":"..."}
-    if obj.get("type") == "result":
+    if event_type == "result":
         result = obj.get("result")
         if result:
             logger.debug("Extracted from result: %s", str(result)[:50])
@@ -472,6 +508,8 @@ async def invoke_chat_stream(
     collected_stderr: list[str] = []
     line_count = 0
     extracted_session_id: str | None = None
+    has_streamed_deltas = False  # Track if we got real stream_event deltas
+    fallback_text: str | None = None  # Last assistant/result full text
 
     try:
         async for event in _iter_bridge_events(cmd, timeout_seconds=CHAT_CLI_TIMEOUT_SECONDS):
@@ -505,9 +543,28 @@ async def invoke_chat_stream(
                         extracted_session_id = session_id_from_line
                         logger.debug("Extracted session_id from stream: %s", extracted_session_id)
 
-                    # Yield text content if present
-                    if text_content:
+                    # Yield text content if present (skip fallback sentinels)
+                    if text_content and text_content != _FALLBACK_SENTINEL:
+                        has_streamed_deltas = True
                         yield text_content
+                    elif text_content == _FALLBACK_SENTINEL:
+                        # Store fallback: extract full text from the raw line
+                        try:
+                            obj = json.loads(event.text.strip())
+                            if obj.get("type") == "assistant":
+                                msg = obj.get("message", {})
+                                content = msg.get("content", [])
+                                if isinstance(content, list):
+                                    parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+                                    fallback_text = "".join(parts) or fallback_text
+                                elif isinstance(content, str):
+                                    fallback_text = content
+                            elif obj.get("type") == "result":
+                                r = obj.get("result")
+                                if isinstance(r, str):
+                                    fallback_text = r
+                        except (json.JSONDecodeError, AttributeError):
+                            pass
 
             elif event.kind == "stderr":
                 if event.text:
@@ -557,11 +614,17 @@ async def invoke_chat_stream(
 
     # Log summary statistics
     logger.info(
-        "Chat CLI completed: provider=%s total_lines=%d stderr_lines=%d",
+        "Chat CLI completed: provider=%s total_lines=%d stderr_lines=%d streamed_deltas=%s",
         provider.value,
         len(collected_stdout),
         len(collected_stderr),
+        has_streamed_deltas,
     )
+
+    # Fallback: if no streaming deltas were received, yield the accumulated full text
+    if not has_streamed_deltas and fallback_text:
+        logger.info("No stream_event deltas received, using fallback text (%d chars)", len(fallback_text))
+        yield fallback_text
 
     # Use session ID extracted during streaming, or fallback to legacy extraction
     if not extracted_session_id:
